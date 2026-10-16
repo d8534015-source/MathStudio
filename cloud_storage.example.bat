@@ -1,5 +1,6 @@
 @echo off
-REM Copy this file to cloud_storage.bat and fill in your own Cloudflare R2 credentials.
+REM MathStudio v41.6.6 legacy configuration DATA example.
+REM Fill a trusted copy, then import it explicitly with private_config.py. Never CALL it.
 REM Do NOT upload or share cloud_storage.bat because it contains secrets.
 set "MATH_R2_ACCOUNT_ID=YOUR_ACCOUNT_ID"
 set "MATH_R2_ACCESS_KEY_ID=YOUR_R2_ACCESS_KEY_ID"

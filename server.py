@@ -1,4 +1,4 @@
-"""Math Studio local tutoring website. Python 3.9+, standard library only.
+"""Math Studio local tutoring website. CPython 3.12–3.14. See requirements.txt for pinned optional document/media support.
 Run: py server.py | py server.py add-admin | py server.py reset-password
 """
 import contextlib
@@ -29,8 +29,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, parse_qs, quote, unquote, urlencode
 from studio_time import weekly_timestamp, timezone_rules, TimezoneDataError
 
+from build_info import VERSION, BUILD_ID, ASSET_VERSION
+from runtime_paths import data_directory
+
 ROOT = Path(__file__).resolve().parent
-DATA = Path(os.environ.get('MATH_DATA', str(ROOT / 'bulletin_data')))
+DATA = data_directory(ROOT)
 PORT = int(os.environ.get('PORT', '5051'))
 BIND = os.environ.get('BIND_HOST', '0.0.0.0')
 PUBLIC_ORIGIN = os.environ.get('PUBLIC_ORIGIN', '').rstrip('/')
@@ -150,23 +153,17 @@ def _extract_translatable_text(row):
         except Exception as ex:
             raise APIError('This Word document could not be prepared for translation: '+str(ex)[:120],422)
     if name.endswith('.pdf') or mime=='application/pdf':
-        reader_cls=None
+        # Parse untrusted PDFs in a bounded child, using only the pinned pypdf.
+        need(len(data)<=32*1024*1024,'PDF translation is limited to 32 MB.',413)
         try:
-            from pypdf import PdfReader as reader_cls
-        except Exception:
-            try:
-                from PyPDF2 import PdfReader as reader_cls
-            except Exception:
-                reader_cls=None
-        need(reader_cls,'PDF translation needs the optional pypdf package on the website computer. Word and text documents work without it.',422)
-        try:
-            reader=reader_cls(io.BytesIO(data)); parts=[]
-            for page in reader.pages[:80]:
-                parts.append(page.extract_text() or '')
-                if sum(map(len,parts))>30000: break
-            return '\n\n'.join(parts)[:30000].strip()
-        except Exception:
-            raise APIError('This PDF does not contain readable text for automatic translation.',422)
+            result=subprocess.run([sys.executable,str(ROOT/'document_worker.py')], input=data,
+                stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=15,check=True,
+                creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+            return result.stdout.decode('utf-8')[:30000].strip()
+        except subprocess.TimeoutExpired:
+            raise APIError('PDF processing timed out. Try a smaller document.',422) from None
+        except (OSError,subprocess.CalledProcessError,UnicodeError):
+            raise APIError('PDF translation needs the pinned pypdf dependency and a readable, unencrypted PDF. Run SETUP MATHSTUDIO.bat.',422) from None
     raise APIError('Automatic translation currently supports text, HTML, DOCX, and text-based PDF files.',422)
 
 def _translate_online(value,target):
@@ -437,7 +434,32 @@ def valid_board(content):
 
 RESOURCE_CODE_ALPHABET='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 BLOCKED_UPLOAD_EXTENSIONS={'.html','.htm','.xhtml','.js','.mjs','.svg','.exe','.msi','.bat','.cmd','.com','.scr','.ps1','.vbs'}
-INLINE_MIME_PREFIXES=('image/','application/pdf','text/','video/mp4','application/msword','application/vnd.ms-','application/vnd.openxmlformats-officedocument.')
+def preview_type(name, stored_mime, data):
+    """Only validated raster formats and PDF signatures may render on our origin."""
+    extension=Path(name).suffix.lower()
+    mime=(stored_mime or '').lower()
+    if extension=='.pdf' and mime=='application/pdf':
+        if re.match(rb'%PDF-(?:1\.[0-7]|2\.0)(?:\r|\n| )',data[:10]) and b'%%EOF' in data[-1024:]:
+            return 'application/pdf'
+        return None
+    formats={'.png':('image/png','PNG'),'.jpg':('image/jpeg','JPEG'),
+             '.jpeg':('image/jpeg','JPEG'),'.gif':('image/gif','GIF'),'.webp':('image/webp','WEBP')}
+    expected=formats.get(extension)
+    if not expected or mime!=expected[0]: return None
+    try:
+        from dependency_check import require_distribution
+        require_distribution('Pillow')
+        from PIL import Image
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('error',Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(data)) as image:
+                if image.format!=expected[1]: return None
+                image.verify()
+        return expected[0]
+    except Exception:
+        return None
+
 
 def storage_config():
     keys=('MATH_R2_ACCOUNT_ID','MATH_R2_ACCESS_KEY_ID','MATH_R2_SECRET_ACCESS_KEY','MATH_R2_BUCKET')
@@ -700,7 +722,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type',mime or 'application/octet-stream')
         self.send_header('Content-Length',str(len(data)))
-        self.send_header('Content-Disposition',f"{disposition}; filename=\"{safe_ascii}\"; filename*=UTF-8''{quote(filename)}")
+        self.send_header('Content-Disposition',f"{disposition}; filename=\"{safe_ascii}\"; filename*=UTF-8''{quote(filename,safe='')}")
+        # A sandboxed, opaque document cannot execute with application privileges.
+        self.send_header('Content-Security-Policy',"sandbox; default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
         self.send_header('Cache-Control','private, no-store')
         self.send_header('X-Content-Type-Options','nosniff')
         self.send_header('Referrer-Policy','no-referrer')
@@ -758,8 +782,9 @@ class Handler(BaseHTTPRequestHandler):
                              JOIN resource_codes rc ON rc.id=m.code_id
                              WHERE f.id=? AND m.code_id=? AND rc.active=1''',(file_id,code_id)).fetchone()
         need(row,'File not found for this access code.',404)
-        inline=path=='/resource/open' and any(row['mime'].startswith(x) for x in INLINE_MIME_PREFIXES)
-        self.send_download(storage_get(row['storage_key'],row['storage_backend']),row['original_name'],row['mime'],inline=inline)
+        data=storage_get(row['storage_key'],row['storage_backend'])
+        mime=preview_type(row['original_name'],row['mime'],data) if path=='/resource/open' else None
+        self.send_download(data,row['original_name'],mime or 'application/octet-stream',inline=bool(mime))
 
     def handle_file_upload(self):
         self.require_user(True)
@@ -1069,7 +1094,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def get_api(self):
         path=self.path_only
-        if path=='/api/desktop-info': return {'build':'v41.6.6-release-candidate','port':PORT,'public_origin':current_public_origin(),'lan_origin':f'http://{self.server.server_address[0] if self.server.server_address[0] not in ("0.0.0.0","::") else "127.0.0.1"}:{PORT}','cloudflare_turn_configured':bool(os.environ.get('CLOUDFLARE_TURN_KEY_ID','').strip() and os.environ.get('CLOUDFLARE_TURN_API_TOKEN','').strip())}
+        if path=='/api/desktop-info': return {'build':BUILD_ID,'port':PORT,'public_origin':current_public_origin(),'lan_origin':f'http://{self.server.server_address[0] if self.server.server_address[0] not in ("0.0.0.0","::") else "127.0.0.1"}:{PORT}','cloudflare_turn_configured':bool(os.environ.get('CLOUDFLARE_TURN_KEY_ID','').strip() and os.environ.get('CLOUDFLARE_TURN_API_TOKEN','').strip())}
         if path=='/api/me': return {'user':public_user(self.user),'csrf':self.session['csrf']}
         if path=='/api/public':
             with db() as c:
@@ -1287,12 +1312,18 @@ class Handler(BaseHTTPRequestHandler):
             need(active and frame,'No native screen frame is available.',404)
             self.send(frame,mime='image/jpeg'); return None
         if path.startswith('/api/'): raise APIError('Not found.',404)
-        files={'/':'index.html','/app.js':'app.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
+        if path=='/admin': self.send_redirect('/teacher'); return None
+        if path=='/build_info.js':
+            self.send(('export const BUILD_ID='+json.dumps(BUILD_ID)+'; export const ASSET_VERSION='+json.dumps(ASSET_VERSION)+';').encode(),mime='text/javascript; charset=utf-8');return None
+        files={'/teacher':'teacher.html','/':'index.html' ,'/app.js':'app.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
         if path not in files and path in ('/booking','/login','/signup','/account','/classroom','/resources','/messages','/join'): path='/'
         need(path in files,'Page not found.',404)
         f=ROOT/files[path]; mime=mimetypes.guess_type(f.name)[0] or 'application/octet-stream'
         if f.suffix=='.js': mime='text/javascript'
-        self.send(f.read_bytes(),mime=mime+'; charset=utf-8')
+        data=f.read_bytes()
+        if f.name in ('index.html','diagnostics.js'):
+            data=data.replace(b'__BUILD_ID__',BUILD_ID.encode()).replace(b'__ASSET_VERSION__',ASSET_VERSION.encode())
+        self.send(data,mime=mime+'; charset=utf-8')
 
     def post_api(self,d):
         path=self.path_only
@@ -1814,6 +1845,8 @@ class Handler(BaseHTTPRequestHandler):
         raise APIError('Not found.',404)
 
 def main():
+    from private_config import apply_config
+    apply_config()
     init()
     if sys.argv[1:]==['add-admin']: return cli_account()
     if sys.argv[1:]==['reset-password']: return cli_account(True)
@@ -1821,7 +1854,7 @@ def main():
     with db() as c: missing=not c.execute("SELECT 1 FROM users WHERE role='admin'").fetchone()
     if missing:
         if os.environ.get('MATH_DESKTOP_MODE')=='1':
-            raise SystemExit('No teacher account exists. Start MathStudioTeacher.exe to create one.')
+            raise SystemExit('No teacher account exists. Run OPEN MATHSTUDIO TEACHER.bat to create one.')
         print('Create the first teacher/admin account:'); cli_account()
     try: server=ThreadingHTTPServer((BIND,PORT),Handler)
     except OSError as ex: raise SystemExit(f'Could not open port {PORT}: {ex}. Stop the program already using that port first.')
@@ -1840,8 +1873,8 @@ def main():
         probe.close()
     except OSError:
         pass
-    print(f'MathStudio v41.6.6 is running on port {PORT}', flush=True)
-    print('Build: v41.6.6-release-candidate', flush=True)
+    print(f'MathStudio v{VERSION} is running on port {PORT}', flush=True)
+    print('Build: '+BUILD_ID, flush=True)
     print(f'Math Studio (this computer): http://127.0.0.1:{PORT}')
     if lan_ip:
         print(f'Math Studio (same Wi-Fi/LAN): http://{lan_ip}:{PORT}')

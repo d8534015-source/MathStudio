@@ -15,7 +15,8 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parent
-LOG = ROOT / "teacher_app_error.log"
+from runtime_paths import state_directory
+LOG = state_directory() / "teacher_app_error.log"
 APP = ROOT / "teacher_meeting_app.py"
 
 
@@ -41,19 +42,11 @@ def main() -> int:
         return 2
 
     args = parse_args()
-    # Native desktop screen sharing uses Pillow for efficient JPEG capture.
-    # Install it once automatically so the teacher does not have to manage
-    # Python packages by hand.
-    try:
-        import PIL  # noqa: F401
-    except Exception:
-        try:
-            subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","--quiet","Pillow>=10"],
-                           cwd=str(ROOT),timeout=180,check=True,creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))
-        except Exception as ex:
-            message("MathStudio Teacher App setup",
-                    "Could not install the screen-sharing component (Pillow).\n\n"+str(ex)+
-                    "\n\nCamera/microphone can still use the video panel, but native screen sharing will be unavailable.")
+    # Never install or update dependencies during a live class launch.
+    from dependency_check import verify_runtime
+    try:verify_runtime()
+    except Exception as ex:
+        message("MathStudio setup required",str(ex));return 2
     # If this bootstrap itself is running through pythonw.exe, prefer the paired
     # pythonw child so no console flashes. Otherwise python.exe is fine.
     exe = Path(sys.executable)
@@ -72,6 +65,7 @@ def main() -> int:
         cmd += ["--skip-auto-media"]
 
     try:
+        LOG.parent.mkdir(parents=True,exist_ok=True)
         LOG.write_text(
             "MathStudio Teacher App startup log\n"
             f"Python: {child_python}\n"

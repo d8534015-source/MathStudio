@@ -14,7 +14,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,
   $('#app').innerHTML=`
     <div class="roomhead">
       <div><p class="eyebrow">Live classroom</p><h1><span data-no-translate>${esc(cl.title)}</span></h1></div>
-      <a href="${instant?'/join':admin?'/admin':'/account'}">Back to ${instant?'join meeting':admin?'teaching calendar':'my lessons'}</a>
+      <a href="${instant?'/join':admin?'/teacher':'/account'}">Back to ${instant?'join meeting':admin?'teaching calendar':'my lessons'}</a>
     </div>
     <section id="prejoin" class="panel prejoin-card">
       <div>
@@ -22,7 +22,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,
         <p>Your camera and microphone start off. You can turn them on after joining.</p>
         <div id="mediaPreflight" class="media-preflight" role="status"></div>
         <div class="actions"><button id="checkMedia" type="button" class="secondary small">Check camera & microphone</button></div>
-        <p class="meta">For another device, use the <strong>HTTPS</strong> address printed by <code>start_https_windows.bat</code>. A local address such as <code>http://10.x.x.x:5051</code> is not a secure browser origin.</p>
+        <p class="meta">For another device, use the <strong>HTTPS</strong> address printed by <code>START STUDENT WEBSITE.bat</code>. A local address such as <code>http://10.x.x.x:5051</code> is not a secure browser origin.</p>
       </div>
       <button id="join">Join classroom</button>
       <p class="meta" id="joinerror" role="status"></p>
@@ -142,7 +142,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,
   }
   function secureMediaAvailable(){return !!(window.isSecureContext&&navigator.mediaDevices?.getUserMedia&&window.RTCPeerConnection);}
   function mediaError(kind,ex){
-    if(!window.isSecureContext) return `${kind} needs HTTPS on a LAN address. Stop this server and run start_https_windows.bat, then open the HTTPS link it prints.`;
+    if(!window.isSecureContext) return `${kind} needs HTTPS on a LAN address. Stop this server and run START STUDENT WEBSITE.bat, then open the HTTPS link it prints.`;
     if(ex?.name==='NotAllowedError') return `${kind} permission was blocked. Allow it in the browser site permissions and try again.`;
     if(ex?.name==='NotFoundError') return `No ${kind.toLowerCase()} was found on this device.`;
     if(ex?.name==='NotReadableError') return `${kind} is already in use or the browser could not start it. Close other apps using the camera/microphone, then try again.`;
@@ -418,7 +418,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,
   }
   $('#share').onclick=async()=>{
     if(screenTrack){await stopShare();return;}
-    if(!window.isSecureContext||!navigator.mediaDevices?.getDisplayMedia){toast('Screen sharing needs HTTPS here. Run start_https_windows.bat and use its HTTPS link in desktop Chrome or Edge.');return;}
+    if(!window.isSecureContext||!navigator.mediaDevices?.getDisplayMedia){toast('Screen sharing needs HTTPS here. Run START STUDENT WEBSITE.bat and use its HTTPS link in desktop Chrome or Edge.');return;}
     let stream;
     try{
       stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:15,max:30}},audio:false,preferCurrentTab:false,selfBrowserSurface:'exclude',surfaceSwitching:'include'});
@@ -430,7 +430,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,
   $('#allow')?.addEventListener('change',async()=>{try{await post('permissions',{drawing:$('#allow').checked});}catch(ex){toast(ex.message);}});
   $('#chatForm')?.addEventListener('submit',ev=>{ev.preventDefault();sendChat($('#chatInput').value);});
   $('#chatInput')?.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&!ev.shiftKey&&!ev.isComposing){ev.preventDefault();sendChat(ev.currentTarget.value);}});
-  $('#end')?.addEventListener('click',async()=>{if(!confirm(tr('End the class and disconnect everyone?')))return;try{await api('/api/admin/class-action',{class_id:cid,action:'end'});await leave();location.href='/admin';}catch(ex){toast(ex.message);}});
+  $('#end')?.addEventListener('click',async()=>{if(!confirm(tr('End the class and disconnect everyone?')))return;try{await api('/api/admin/class-action',{class_id:cid,action:'end'});await leave();location.href='/teacher';}catch(ex){toast(ex.message);}});
 
   function remoteTile(person){
     const div=document.createElement('article');div.className='video-card';div.id='peer-'+person.id;

@@ -1,18 +1,20 @@
 # MathStudio v41.6.6 — Pre-release acceptance checklist
 
-**Status:** RELEASE CANDIDATE — not production-verified. This build changes teacher-interface localization, not the established v41.6.5 browser WebRTC implementation. Record actual results; do not mark anything passed without observing it.
+**Status:** RELEASE CANDIDATE — not production-verified. This hardened candidate includes approved security, workflow, annotation, localization and packaging changes; WebRTC negotiation/track behavior is preserved. Record actual results; do not mark anything passed without observing it.
 
 **Test setup:** Teacher on Windows; one iPhone student, one Android student; two separate networks (Wi-Fi and cellular); a second Windows user or clean Windows environment; test English and 中文. Do not use real student personal data during the initial test.
 
 ## 1. Installation, build consistency and recovery
 - [ ] OWNER ZIP extracts into exactly `MathStudio_v41_6_6_OWNER_Release_Candidate/` (no nested outdated folder).
 - [ ] TEACHER READY ZIP extracts into exactly `MathStudio_v41_6_6_TEACHER_READY_Release_Candidate/`.
-- [ ] The server terminal says `MathStudio v41.6.6 is running on port 5051` and shows the matching build ID.
+- [ ] Validate both source selections with release_package.py and verify the manifest/hash through the trusted reviewed commit. No runtime data, configuration, credentials, binaries or student files are included.
+- [ ] Record the exact Windows Python/Tk/pip/cloudflared versions and verify the optional EXE/installer signature after the Windows build. Cloud source candidates are not signed installers.
+- [ ] The server terminal says `MathStudio v41.6.6 is running on port 5051` and shows the build ID in version.json.
 - [ ] The Teacher App connects to OWNER when OWNER already listens on 5051; it does not create a second server or claim the site is offline.
-- [ ] On a separate clean Windows environment, TEACHER READY sets up required dependencies and starts with one launcher.
+- [ ] On a separate clean Windows environment, TEACHER READY setup installs the hash-pinned dependencies, verifies Tk/timezones, then opens through the documented launcher without VS Code.
 - [ ] If the port belongs to a different application, show an actionable error; do not stop another process.
 - [ ] Restart server and Teacher App; database/accounts/classes/resources persist.
-- [ ] Existing TURN credentials load if present; fresh installs can configure TURN without exposing secrets.
+- [ ] TURN/R2 settings import only from an explicitly selected trusted data file; no discovered batch script executes. Fresh installs configure TURN without exposing secrets.
 - [ ] Downloaded unsigned launchers may show Windows Unknown Publisher / SmartScreen. Do not bypass protections globally; sign a packaged installer before wide distribution.
 
 ## 2. Live classroom: camera/audio/network (release blocker)
@@ -32,7 +34,7 @@
 - [ ] Instant meeting generates a 10-digit code; teacher enters as host automatically; a guest can join by code.
 - [ ] Scheduled and instant meetings use the same full classroom layout and teacher permissions.
 - [ ] Screen share from Windows is legible for math notation, drawing, a PDF and slides; screen-share switching/stopping works.
-- [ ] Native desktop overlay correctly draws over other windows; interact mode clicks through; erase/undo/clear work.
+- [ ] Native desktop overlay correctly draws over other windows; interact mode clicks through; erase/undo/clear survive conflicts. Browser drawing works during native sharing only with server permission.
 - [ ] Student drawing is off by default and only works after teacher permits it; student cannot control teacher-only options.
 - [ ] Participants appear and disappear accurately with an expected meeting limit of approximately six.
 - [ ] Live chat sends with Enter and newlines with Shift+Enter; no duplicated messages after reconnect.
@@ -45,6 +47,7 @@
 - [ ] Late scheduled classes remain available to start until explicitly ended/cancelled.
 - [ ] Group sessions have expected 2–5 seats and block overlapping private bookings.
 - [ ] My Lessons, booking status, room Join button and dashboard refresh automatically without losing form contents.
+- [ ] PDF/raster previews work under restrictive CSP in Windows Chrome/Edge, iPhone Safari and Android Chrome; disguised HTML/SVG/XML and unknown types download as attachments.
 - [ ] Resource codes can be generated/revoked; individual and bundle downloads work on PC/iPhone/Android.
 - [ ] Persistent messages and lesson/group chats behave correctly across logouts, refreshes and server restarts.
 - [ ] Document translation is opt-in per code; originals stay unchanged; the privacy explanation is visible.

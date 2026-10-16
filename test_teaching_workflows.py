@@ -49,8 +49,14 @@ def extracted_functions(filename, names, namespace):
 
 
 class TeachingBackend(BackendCase):
+    # Toronto retains DST in pinned IANA 2026d; Edmonton no longer does.
+    def setUp(self):
+        super().setUp()
+        with self.app.db() as c:
+            c.execute("UPDATE settings SET value=? WHERE key='timezone'",('America/Toronto',))
+
     def local_start(self, value):
-        return datetime.fromisoformat(value).replace(tzinfo=ZoneInfo('America/Edmonton')).timestamp()
+        return datetime.fromisoformat(value).replace(tzinfo=studio_zone('America/Toronto')).timestamp()
 
     def test_book01_availability_and_group_recurrence_preserve_wall_time(self):
         teacher=self.client('teacher')
@@ -65,7 +71,7 @@ class TeachingBackend(BackendCase):
                 with self.app.db() as c:
                     for table,ids in [('availability',made[1]['ids']),('classes',group[1]['ids'])]:
                         rows=c.execute(f'SELECT start FROM {table} WHERE id IN (?,?) ORDER BY start',ids).fetchall()
-                        local=[datetime.fromtimestamp(r['start'],ZoneInfo('America/Edmonton')) for r in rows]
+                        local=[datetime.fromtimestamp(r['start'],studio_zone('America/Toronto')) for r in rows]
                         self.assertEqual([d.hour for d in local],[16,16])
                         self.assertEqual((local[1].date()-local[0].date()).days,7)
 
@@ -115,9 +121,9 @@ class TeachingBackend(BackendCase):
         self.assertEqual(made[0],200,made[1])
         with self.app.db() as c:
             row=c.execute('SELECT start,end FROM availability ORDER BY start DESC LIMIT 1').fetchone()
-        self.assertEqual(datetime.fromtimestamp(row['end'],studio_zone()).hour,4)
+        self.assertEqual(datetime.fromtimestamp(row['end'],studio_zone('America/Toronto')).hour,4)
         self.assertEqual(row['end']-row['start'],18000)
-        self.assertEqual(weekly_timestamp(self.local_start('2026-10-25T01:30'),1),self.local_start('2026-11-01T01:30'))
+        self.assertEqual(weekly_timestamp(self.local_start('2026-10-25T01:30'),1,'America/Toronto'),self.local_start('2026-11-01T01:30'))
 
     def test_book02_browser_receives_authoritative_timezone_rules(self):
         teacher=self.client('teacher')
@@ -229,15 +235,15 @@ class BrowserWorkflows(unittest.TestCase):
 
 class StudioTimeTests(unittest.TestCase):
     def test_book02_shared_python_rules_match_browser_policy(self):
-        expected={'America/Edmonton':'2026-11-01T23:00:00+00:00',
+        expected={'America/Edmonton':'2026-11-01T22:00:00+00:00',
                   'America/Vancouver':'2026-11-01T23:00:00+00:00',
                   'America/Toronto':'2026-11-01T21:00:00+00:00','UTC':'2026-11-01T16:00:00+00:00'}
         for zone,value in expected.items():
             self.assertEqual(datetime.fromtimestamp(parse_local('2026-11-01','16:00',zone),ZoneInfo('UTC')).isoformat(),value)
             first=parse_local('2026-10-25','16:00',zone)
             self.assertEqual(weekly_timestamp(first,1,zone),parse_local('2026-11-01','16:00',zone))
-        with self.assertRaises(ValueError): parse_local('2027-03-14','02:30','America/Edmonton')
-        self.assertEqual(datetime.fromtimestamp(parse_local('2026-11-01','01:30'),ZoneInfo('UTC')).hour,7)
+        with self.assertRaises(ValueError): parse_local('2027-03-14','02:30','America/Toronto')
+        self.assertEqual(datetime.fromtimestamp(parse_local('2026-11-01','01:30','America/Toronto'),ZoneInfo('UTC')).hour,5)
 
     def test_book02_desktop_calendar_and_labels_ignore_device_zone(self):
         class DeviceDateTime(datetime):

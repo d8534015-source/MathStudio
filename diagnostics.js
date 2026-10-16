@@ -1,5 +1,5 @@
 (() => {
-  const build = 'v40-full-meeting-auto-refresh';
+  const build = '__BUILD_ID__';
   const errors = [];
   const text = value => {
     if (!value) return 'Unknown browser error';

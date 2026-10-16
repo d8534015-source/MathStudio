@@ -1,12 +1,12 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title MathStudio - Free Camera and Audio Setup
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup_free_media.ps1"
-if errorlevel 1 (
-  echo.
-  echo Setup was not completed.
-)
-echo.
+if not exist "%~dp0.venv\Scripts\python.exe" goto setup
+"%~dp0.venv\Scripts\python.exe" "%~dp0private_config.py" configure-turn
+set "RESULT=%errorlevel%"
 pause
-endlocal
+exit /b %RESULT%
+:setup
+echo Run SETUP MATHSTUDIO.bat first.
+pause
+exit /b 1

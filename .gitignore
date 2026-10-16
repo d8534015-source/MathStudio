@@ -10,3 +10,10 @@ media_config.bat
 public_origin.txt
 bulletin_data/public_origin.txt
 teacher_app_error.log
+
+private_config.json
+release-artifacts/
+wheelhouse/
+staging/
+*.obj
+*.pdb

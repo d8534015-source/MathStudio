@@ -1,6 +1,7 @@
+import {BUILD_ID,ASSET_VERSION} from './build_info.js';
 import {partsAt,fromWall,shiftLocalDays,formatAt,setTimezoneRules} from './studio_time.js';
 window.__MATHSTUDIO_SCRIPT_STARTED__ = true;
-window.__MATHSTUDIO_BUILD__ = 'v41.6-session-media-l10n';
+window.__MATHSTUDIO_BUILD__ = BUILD_ID;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Content boundaries must survive live DOM translation and background refreshes.
@@ -744,6 +745,6 @@ function startGlobalAutoRefresh(){
   globalRefreshTimer=setInterval(autoRefreshCurrentPage,3000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)autoRefreshCurrentPage();});
 }
-async function boot(){try{const r=await api('/api/me');me=r.user;csrf=r.csrf;const pub=await api('/api/public');settings=pub.settings;setTimezoneRules(pub.timezone_rules);posts=pub.posts;nav();await refreshClasses();switch(location.pathname){case '/login':auth();break;case '/signup':auth(true);break;case '/booking':await booking();break;case '/account':await booking(true);break;case '/join':await instantJoin();break;case '/resources':await resources();break;case '/messages':if(me?.role==='guest'){location.href='/join';return;}await messagesPage();break;case '/classroom':if(!me){location.href='/join';return;}const {mountClassroom}=await import('./classroom.js?v=41_65');await mountClassroom({api,toast,me,settings,classes,esc,tr,localize:applySiteLanguage});break;default:home();}startGlobalAutoRefresh();window.__MATHSTUDIO_BOOTED__=true;}catch(ex){window.__MATHSTUDIO_BOOT_ERROR__=String(ex?.stack||ex);$('#app').innerHTML=`<div class="error"><strong>Math Studio could not start.</strong><br>${esc(ex.message)}</div><p class="meta">Build v41.6-session-media-l10n</p><a href="/">Try again</a>`;}}
+async function boot(){try{const r=await api('/api/me');me=r.user;csrf=r.csrf;const pub=await api('/api/public');settings=pub.settings;setTimezoneRules(pub.timezone_rules);posts=pub.posts;nav();await refreshClasses();switch(location.pathname){case '/login':auth();break;case '/signup':auth(true);break;case '/booking':await booking();break;case '/account':await booking(true);break;case '/join':await instantJoin();break;case '/resources':await resources();break;case '/messages':if(me?.role==='guest'){location.href='/join';return;}await messagesPage();break;case '/classroom':if(!me){location.href='/join';return;}const {mountClassroom}=await import(`./classroom.js?v=${ASSET_VERSION}`);await mountClassroom({api,toast,me,settings,classes,esc,tr,localize:applySiteLanguage});break;default:home();}startGlobalAutoRefresh();window.__MATHSTUDIO_BOOTED__=true;}catch(ex){window.__MATHSTUDIO_BOOT_ERROR__=String(ex?.stack||ex);$('#app').innerHTML=`<div class="error"><strong>Math Studio could not start.</strong><br>${esc(ex.message)}</div><p class="meta">Build ${BUILD_ID}</p><a href="/">Try again</a>`;}}
 installLanguageObserver();
 boot();
