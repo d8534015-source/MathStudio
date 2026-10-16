@@ -23,7 +23,11 @@ def candidate_files(root,manifest,kind):
         if path.resolve()!=path or not path.is_file():raise ValueError('Missing or linked release file: '+name)
         data=path.read_bytes()
         if hashlib.sha256(data).hexdigest()!=item['sha256']:raise ValueError('Release hash mismatch: '+name)
-        result[name]=data
+        archive_name=item.get('archive_names',{}).get(kind,name)
+        archive_path=PurePosixPath(archive_name)
+        if archive_path.is_absolute() or '..' in archive_path.parts or '\\' in archive_name or archive_name in result:
+            raise ValueError('Invalid or duplicate archive name: '+archive_name)
+        result[archive_name]=data
     if not result:raise ValueError('Empty release selection.')
     return result
 

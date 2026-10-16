@@ -10,6 +10,7 @@ import sys
 import venv
 from dependency_check import verify_runtime
 from private_config import apply_config
+from teacher_connection import teacher_only, select_origin
 
 ROOT=Path(__file__).resolve().parent
 VENV=ROOT/'.venv'
@@ -48,7 +49,14 @@ def cloudflared_available():
 
 def launch(kind):
     verify_runtime(gui=kind=='teacher')
-    env=apply_config(os.environ.copy());env['PORT']='5051'
+    if teacher_only():
+        if kind!='teacher':raise RuntimeError('Teacher Ready connects to OWNER; it cannot host the backend.')
+        origin=select_origin()
+        if not origin:return 0
+        env=os.environ.copy();env['MATHSTUDIO_SERVER_URL']=origin;env['MATHSTUDIO_REMOTE']='1'
+    else:
+        env=apply_config(os.environ.copy())
+    env['PORT']='5051'
     if kind=='website' and cloudflared_available():
         env['MATH_PYTHON']=str(runtime_python())
         return subprocess.call(['powershell.exe','-NoProfile','-File',str(ROOT/'start_https.ps1')],cwd=ROOT,env=env)
@@ -60,11 +68,12 @@ def launch(kind):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     action=parser.add_mutually_exclusive_group(required=True)
-    action.add_argument('--install',action='store_true');action.add_argument('--verify',action='store_true')
+    action.add_argument('--configure-owner',action='store_true');action.add_argument('--install',action='store_true');action.add_argument('--verify',action='store_true')
     action.add_argument('--launch',choices=('teacher','website','server'))
     parser.add_argument('--wheelhouse',type=Path)
     args=parser.parse_args()
     try:
+        if args.configure_owner:select_origin(force=True);return 0
         if args.install:install(args.wheelhouse);return 0
         if args.verify:verify_runtime(gui=os.name=='nt');print('Runtime versions, timezone data and required imports verified.');return 0
         return launch(args.launch)

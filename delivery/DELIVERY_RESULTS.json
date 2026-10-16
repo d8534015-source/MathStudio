@@ -1,0 +1,37 @@
+{
+  "owner": {
+    "filename": "MathStudio_v41_6_6_OWNER_Delivery_Candidate.zip",
+    "bytes": 245681,
+    "members": 62,
+    "sha256": "33930d4d7b9efb6e85a8c6cb17afd329a71130cc4f41581b66f99e06804bf623",
+    "single_root": "MathStudio_v41_6_6_OWNER_Delivery_Candidate",
+    "crc": "pass",
+    "manifest_hashes": "pass",
+    "launcher_references": "pass"
+  },
+  "teacher": {
+    "filename": "MathStudio_v41_6_6_TEACHER_READY_Delivery_Candidate.zip",
+    "bytes": 81007,
+    "members": 24,
+    "sha256": "899d94db1a40bb2ec03b6d3fa525f008d803f8f386031bc54b35de38b3f6fef0",
+    "single_root": "MathStudio_v41_6_6_TEACHER_READY_Delivery_Candidate",
+    "crc": "pass",
+    "manifest_hashes": "pass",
+    "launcher_references": "pass"
+  },
+  "tests": {
+    "suite": "unittest discover -v",
+    "passed": 91,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 13.815,
+    "javascript_checks_included": 12,
+    "note": "Full suite executed once before the final settings clarification; 18 focused delivery/localization/manifest tests then passed after implementing it."
+  },
+  "final_settings_tests": {
+    "passed": 18,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 0.697
+  }
+}

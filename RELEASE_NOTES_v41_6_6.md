@@ -1,6 +1,6 @@
 # MathStudio v41.6.6 — hardened release candidate
 
-Canonical identity: `version.json` (`v41.6.6-release-candidate-hardening1`). This source candidate includes approved security/session/TURN stability repairs, teaching/chat/resource/timezone corrections, annotation/localization fixes, and Phase 2C release hardening.
+Canonical identity: `version.json` (`v41.6.6-delivery-candidate1`). This source candidate includes approved security/session/TURN stability repairs, teaching/chat/resource/timezone corrections, annotation/localization fixes, and Phase 2C release hardening.
 
 Phase 2C adds explicit hash-checked dependency setup, a first-account/start-or-reuse Teacher App path, external private configuration with data-only migration, an explicit source package manifest, launcher source/build/signing instructions, version-matched web diagnostics/assets and supported teacher navigation. Unknown/executable uploaded types download as attachments; validated raster images/PDF signatures may preview under a restrictive sandbox policy. PyPDF2 fallback is removed and PDF extraction runs in a bounded child.
 
@@ -9,3 +9,5 @@ Pillow 12.3.0, pypdf 6.20.1 and tzdata 2026.4 are pinned and hash checked. Pinne
 The user reported working bidirectional media on v41.6.5. Subsequent approved changes retain its WebRTC negotiation/track behavior; this is not a new physical-device certification. Windows clean installation, actual cmd/PowerShell execution, native GUI/device media, code signing and final distribution assembly remain pending.
 
 Read INSTALL_WINDOWS.md before upgrade, BUILD_RELEASE.md for exact remaining build steps, and RELEASE_CHECKLIST.md for acceptance. No signed executable/installer is included, no release is published, and production credentials/student data must never enter a source package.
+
+Delivery amendment: Teacher Ready now connects only to a separately hosted OWNER HTTPS backend. Native teacher controls run on the teacher PC; the OWNER receives a client-launch request instead of starting its own desktop window. See DELIVERY_CHECKLIST.md.
