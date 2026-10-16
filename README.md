@@ -1,47 +1,22 @@
-MathStudio v38 — Full Teacher Meeting
+# MathStudio v41.6.6 — hardened release candidate
 
-# MathStudio v36 — Modern Bilingual Teacher + Instant Meetings
+Python backend on port 5051, Windows Teacher App, and bilingual student website. This branch includes the approved Phase 2A, Phase 2B Parts 1/2, and Phase 2C fixes. Current build/asset identity is in `version.json`.
 
-## Start
+For normal Windows use, follow **[INSTALL_WINDOWS.md](INSTALL_WINDOWS.md)**: install supported x64 Python with Tcl/Tk, double-click **SETUP MATHSTUDIO.bat**, then **OPEN MATHSTUDIO TEACHER.bat**. No VS Code is needed. The Teacher App creates the first teacher account on a fresh install and starts or reuses a matching website. Remote media requires an HTTPS student link and working TURN configuration.
 
-- `START STUDENT WEBSITE.bat` starts the student website/backend on port 5051.
-- `START TEACHER APP.bat` starts the desktop teacher application.
-- `MathStudioTeacher.exe` is the teacher app launcher.
+Private credentials and new installation data live outside the application folder. Legacy in-folder data remains in place; back up and migrate deliberately. Do not send databases, student files, logs, TURN tokens or configuration files with a package. Old configuration batch files are not discovered or executed. See the explicit import instructions.
 
-Keep the website server running while using the Teacher App.
+Release inputs and provenance are documented in [BUILD_RELEASE.md](BUILD_RELEASE.md) and [release_manifest.json](release_manifest.json). The undocumented historical EXE is removed. No signed installer or replacement executable has been built in this Cloud environment.
 
-## v36 changes
+Validate dependencies and run tests in an isolated environment:
 
-- Teacher App detects the available screen/window size and scales its sidebar and calendar to fit.
-- The weekly teacher calendar keeps all seven days visible without horizontal scrolling.
-- Schedule forms moved into separate dialogs so the calendar does not get squeezed vertically.
-- Student website uses responsive grids and viewport-based calendar columns.
-- Home-page feature labels no longer inherit the old fixed-width number badge styling.
-- New **Join meeting** page for 10-digit instant meeting codes.
-- Teachers can start an **Instant Meeting** without selecting a scheduled class.
-- Instant meetings generate a unique 10-digit numeric share code.
-- Students may join instant meetings while signed in or as a guest with only a display name.
-- Guest users are not added to the permanent student account list.
-- Instant-meeting chat is live-session chat rather than persistent account chat.
+```text
+python -m venv .venv
+# Activate that environment, then:
+python -m pip install --require-hashes --only-binary=:all: -r requirements.txt
+python -m unittest discover -v
+node test_browser_workflows.mjs
+python release_package.py --kind teacher
+```
 
-## Instant meeting workflow
-
-1. Open Teacher App → Meetings.
-2. Click **Start instant meeting**.
-3. Enter an optional meeting title.
-4. MathStudio copies the 10-digit code to the clipboard and opens the native teacher meeting window.
-5. Students open the student website → **Join meeting**, enter the code, and join either with their account or as a guest.
-
-The code remains valid while the meeting is active and is deactivated when the teacher ends or cancels the meeting.
-
-### v36 additions
-- Modernized Teacher App booking/actions layout and fixed invisible action-button labels.
-- Instant meeting codes are live as soon as the teacher creates them.
-- Closing the native Teacher Meeting window ends the classroom and removes it from active classes.
-- English / 中文 mode on the student website and Teacher App.
-- Resource access codes can opt into automatic English/Chinese document translation. Translation is off by default and uses an online translation service only when the teacher enables it for that code.
-- Chat: Enter sends; Shift+Enter inserts a new line in multiline chat boxes.
-
-
-## v37 direct teacher instant meeting
-Creating an Instant Meeting from the Teacher App launches the native host immediately. The camera/audio browser panel uses a one-time admin handoff and goes straight to the classroom; only students use the 10-digit join code.
+Tests use temporary databases and synthetic accounts. Node is needed only for development tests. Windows installation and physical Windows/iPhone/Android media acceptance remain required: [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md). No unit-test result certifies bidirectional media on physical devices.

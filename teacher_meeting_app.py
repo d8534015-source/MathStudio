@@ -1,4 +1,4 @@
-"""MathStudio Teacher Meeting App (Windows, standard library only).
+"""MathStudio Teacher Meeting App (Windows; pinned Pillow supports native screen capture).
 
 Launched automatically by the local MathStudio server when an admin starts a class.
 The native transparent overlay is intentionally separate from the browser so teacher
@@ -1044,7 +1044,7 @@ def show_launcher(server: str):
     card.pack(fill="x")
     tk.Label(card, text=tr('How to start a class'), bg="#16212c", fg="#f4f7f8",
              font=("Segoe UI", 13, "bold"), anchor="w").pack(fill="x")
-    tk.Label(card, text=(tr('1. Keep the MathStudio server running.\n2. Open Admin in the website.\n3. Under Confirmed classes, press Start teacher app.\n4. This window becomes the live meeting toolbar and the desktop overlay opens automatically.')),
+    tk.Label(card, text=(tr('1. Double-click OPEN MATHSTUDIO TEACHER.bat.\n2. Sign in to the Windows Teacher App.\n3. Select a confirmed class and start the meeting.\n4. Keep the meeting toolbar open while teaching.')),
              bg="#16212c", fg="#c5d1d6", justify="left", anchor="w",
              font=("Segoe UI", 10)).pack(fill="x", pady=(8, 14))
 
@@ -1057,19 +1057,19 @@ def show_launcher(server: str):
     def check_server():
         try:
             http_json(server.rstrip('/') + "/api/public", timeout=3)
-            status.set(tr('Server connected ✓  ·  Start a confirmed class from Admin.'))
+            status.set(tr('Server connected ✓  ·  Start a confirmed class from the Windows Teacher App.'))
         except Exception as ex:
             status.set(tr("Server not reachable · ") + str(ex))
 
     def open_admin():
-        webbrowser.open(server.rstrip('/') + "/admin", new=1, autoraise=True)
+        webbrowser.open(server.rstrip('/') + "/teacher", new=1, autoraise=True)
 
     def button(text, command, bg):
         return tk.Button(buttons, text=text, command=command, bg=bg, fg="white",
                          activebackground="#157d74", activeforeground="white", relief="flat",
                          bd=0, padx=16, pady=10, cursor="hand2", font=("Segoe UI", 10, "bold"))
 
-    button(tr('Open MathStudio Admin'), open_admin, "#157d74").pack(side="left", padx=(0, 8))
+    button(tr('Teacher App instructions'), open_admin, "#157d74").pack(side="left", padx=(0, 8))
     button(tr('Check server'), check_server, "#31505f").pack(side="left")
 
     helpbox = tk.Frame(wrap, bg="#0f1720", pady=18)

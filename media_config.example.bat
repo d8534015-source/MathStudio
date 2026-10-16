@@ -1,5 +1,6 @@
 @echo off
-REM MathStudio v39 media configuration.
+REM MathStudio v41.6.6 legacy configuration DATA example.
+REM Never CALL this file. Fill a trusted copy, then import it with private_config.py.
 REM Preferred free option: Cloudflare Realtime TURN.
 REM Keep this file PRIVATE. Never send the token in chat or commit media_config.bat to GitHub.
 set "CLOUDFLARE_TURN_KEY_ID=YOUR_TURN_KEY_ID"

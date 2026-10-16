@@ -20,11 +20,14 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
 from teacher_localization import translate as translate_ui, read_language, save_language, content_label, localize_value
 from studio_time import studio_zone, parse_local
+from build_info import BUILD_ID
+from runtime_paths import data_directory, state_directory
+from private_config import apply_config
 
 ROOT = Path(__file__).resolve().parent
 PORT = 5051
 LOCAL_ORIGIN = f"http://127.0.0.1:{PORT}"
-DATA = ROOT / "bulletin_data"
+DATA = data_directory(ROOT)
 APP_TITLE = "MathStudio Teacher"
 
 
@@ -271,20 +274,6 @@ def server_build():
         return ''
 
 
-def load_bat_env(env, path):
-    try:
-        for raw in Path(path).read_text(encoding='utf-8',errors='ignore').splitlines():
-            line=raw.strip()
-            if line.lower().startswith('set '):
-                item=line[4:].strip().strip('\"')
-                if '=' in item:
-                    k,v=item.split('=',1); k=k.strip(); v=v.strip().strip('\"')
-                    if k: env[k]=v
-    except OSError:
-        pass
-    return env
-
-
 def ensure_admin_account(parent):
     sys.path.insert(0, str(ROOT))
     import server
@@ -346,31 +335,33 @@ def ensure_admin_account(parent):
 
 def start_server_process():
     if can_connect():
-        if server_build()=='v41.6.6-release-candidate':
+        if server_build()==BUILD_ID:
             return None
-        raise RuntimeError(f'Port {PORT} is already being used by another/older MathStudio. Stop that version first, then reopen MathStudioTeacher.exe.')
+        raise RuntimeError(f'Port {PORT} is already being used by another/older MathStudio. Stop that version first, then run OPEN MATHSTUDIO TEACHER.bat.')
     env = os.environ.copy()
-    load_bat_env(env, ROOT/'cloud_storage.bat')
-    load_bat_env(env, ROOT/'media_config.bat')
+    apply_config(env)
     env['BIND_HOST'] = '0.0.0.0'
     env['PORT'] = str(PORT)
     env['MATH_DESKTOP_MODE'] = '1'
-    # Load optional local configuration files through cmd so existing settings still work.
+    # The dashboard owns a local Cloudflare connector; only loopback may supply CF client IPs.
+    env.setdefault('MATH_TRUSTED_PROXIES','127.0.0.1/32,::1/128')
     cmd = [sys.executable, str(ROOT / 'server.py')]
-    proc = subprocess.Popen(
-        cmd,
-        cwd=str(ROOT),
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
-        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
-    )
+    log_path=state_directory()/'server_startup.log'
+    log_path.parent.mkdir(parents=True,exist_ok=True)
+    log=log_path.open('a',encoding='utf-8')
+    try:
+        proc = subprocess.Popen(
+            cmd, cwd=str(ROOT), env=env, stdout=log, stderr=log,
+            stdin=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+        )
+    finally:
+        log.close()
     deadline = time.time() + 12
     while time.time() < deadline:
         if proc.poll() is not None:
             raise RuntimeError('The MathStudio student server closed during startup.')
-        if can_connect() and server_build()=='v41.6.6-release-candidate':
+        if can_connect() and server_build()==BUILD_ID:
             return proc
         time.sleep(.15)
     raise RuntimeError(f'MathStudio could not start on port {PORT}.')
@@ -478,14 +469,16 @@ class TeacherDesktopApp:
         self.root.configure(bg=bg)
 
     def _bootstrap(self):
-        # v36: website/server and teacher app remain independent and responsive.
-        # Always show a real app window, even when the website has not been started yet.
+        # Reuse a healthy matching server; create an account/start only when absent.
         self.root.deiconify()
         if not can_connect():
-            self.show_server_offline('The student website server is not running on port 5051.')
-            return
+            try:
+                if not ensure_admin_account(self.root):return
+                self.server_process=start_server_process()
+            except Exception as ex:
+                self.show_server_offline(str(ex));return
         build = server_build()
-        if build != 'v41.6.6-release-candidate':
+        if build != BUILD_ID:
             self.show_server_offline(
                 'Port 5051 is running a different MathStudio build. Stop that server and start the v41.6.6 student website.'
             )
@@ -514,7 +507,7 @@ class TeacherDesktopApp:
         if not can_connect():
             return messagebox.showwarning(APP_TITLE,self.tr('The website server is still offline. Start START STUDENT WEBSITE.bat first.'), parent=self.root)
         build = server_build()
-        if build != 'v41.6.6-release-candidate':
+        if build != BUILD_ID:
             return messagebox.showwarning(APP_TITLE,self.tr('Port 5051 belongs to another MathStudio build. Stop it and start the v41.6.6 website.'), parent=self.root)
         self.show_login()
 

@@ -1,18 +1,25 @@
 """Studio wall-clock scheduling using IANA timezones, independent of OS zone."""
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
+from importlib.resources import files
+import re
 
 
 class TimezoneDataError(RuntimeError):
     pass
 
 
+@lru_cache(maxsize=32)
 def studio_zone(name='America/Edmonton'):
+    # Always use the pinned IANA database, including on hosts with stale OS data.
+    if not isinstance(name,str) or not re.fullmatch(r'[A-Za-z0-9_+.-]+(?:/[A-Za-z0-9_+.-]+)*',name) or any(part in ('.','..') for part in name.split('/')):
+        raise TimezoneDataError('Invalid studio timezone.')
     try:
-        return ZoneInfo(name)
-    except ZoneInfoNotFoundError as ex:
-        raise TimezoneDataError('Time zone data is unavailable. Run py -m pip install -r requirements.txt.') from ex
+        with files('tzdata.zoneinfo').joinpath(*name.split('/')).open('rb') as source:
+            return ZoneInfo.from_file(source,key=name)
+    except (ImportError,OSError,ValueError) as ex:
+        raise TimezoneDataError('Time zone data is unavailable. Run SETUP MATHSTUDIO.bat.') from ex
 
 
 def resolve_wall(value, name='America/Edmonton'):

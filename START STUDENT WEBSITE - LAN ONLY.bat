@@ -1,14 +1,13 @@
 @echo off
+setlocal
 cd /d "%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0restore_media_config.ps1" -TargetDirectory "%~dp0."
-title MathStudio Student Website - LAN only
-if exist "%~dp0cloud_storage.bat" call "%~dp0cloud_storage.bat"
-if exist "%~dp0media_config.bat" call "%~dp0media_config.bat"
-set "BIND_HOST=0.0.0.0"
-set "PORT=5051"
-py server.py
-if errorlevel 1 (
-  where python.exe >nul 2>&1 && python server.py
-)
-echo.
+if not exist "%~dp0.venv\Scripts\python.exe" goto setup
+"%~dp0.venv\Scripts\python.exe" "%~dp0runtime_setup.py" --launch server
+set "RESULT=%errorlevel%"
+echo Student website stopped. Read INSTALL_WINDOWS.md for recovery.
 pause
+exit /b %RESULT%
+:setup
+echo First double-click SETUP MATHSTUDIO.bat in this folder.
+pause
+exit /b 1

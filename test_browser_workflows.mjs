@@ -11,6 +11,18 @@ if(zoneHelpers.setTimezoneRules)zoneHelpers.setTimezoneRules({
   end:Date.parse('2028-01-01T00:00:00Z')/1000,
   transitions:[{at:Date.parse('2026-10-01T00:00:00Z')/1000,offset:-7*3600}]});
 
+// Pinned tzdata 2026d: Alberta stays at UTC-6; Toronto retains DST.
+if(zoneHelpers.setTimezoneRules){
+  zoneHelpers.setTimezoneRules({zone:'America/Edmonton',start:Date.parse('2026-10-01T00:00:00Z')/1000,
+    end:Date.parse('2028-01-01T00:00:00Z')/1000,transitions:[{at:Date.parse('2026-10-01T00:00:00Z')/1000,offset:-6*3600}]});
+  zoneHelpers.setTimezoneRules({zone:'America/Toronto',start:Date.parse('2026-10-01T00:00:00Z')/1000,
+    end:Date.parse('2028-01-01T00:00:00Z')/1000,transitions:[
+      {at:Date.parse('2026-10-01T00:00:00Z')/1000,offset:-4*3600},
+      {at:Date.parse('2026-11-01T06:00:00Z')/1000,offset:-5*3600},
+      {at:Date.parse('2027-03-14T07:00:00Z')/1000,offset:-4*3600},
+      {at:Date.parse('2027-11-07T06:00:00Z')/1000,offset:-5*3600}]});
+}
+
 function scheduleContext(zone='America/Edmonton'){
   const context={...zoneHelpers,URLSearchParams,settings:{timezone:zone},siteLang:'en',
     location:{search:'?week='+Date.parse('2026-10-26T18:00:00Z')/1000},
@@ -28,19 +40,19 @@ test('BOOK-02 calendar and inputs use studio timezone independently of device zo
       process.env.TZ=device;
       const c=scheduleContext();
       assert.equal(c.weekStartFromParam().toISOString(),'2026-10-26T06:00:00.000Z',device);
-      assert.equal(c.combineLocalDateTime('2026-11-01','16:00').toISOString(),'2026-11-01T23:00:00.000Z',device);
-      assert.equal(c.minuteOfDay(Date.parse('2026-11-01T23:00:00Z')/1000),960);
-      assert.equal(c.gridTimestamp(c.weekStartFromParam(),6,960),Date.parse('2026-11-01T23:00:00Z')/1000);
+      assert.equal(c.combineLocalDateTime('2026-11-01','16:00').toISOString(),'2026-11-01T22:00:00.000Z',device);
+      assert.equal(c.minuteOfDay(Date.parse('2026-11-01T22:00:00Z')/1000),960);
+      assert.equal(c.gridTimestamp(c.weekStartFromParam(),6,960),Date.parse('2026-11-01T22:00:00Z')/1000);
       assert.equal(c.localDateValue(new Date('2026-11-02T01:00:00Z')),'2026-11-01');
-      assert.equal(c.quarterTimeValue(new Date('2026-11-02T01:00:00Z')),'18:00');
+      assert.equal(c.quarterTimeValue(new Date('2026-11-02T01:00:00Z')),'19:00');
     }
   }finally{if(oldTZ===undefined)delete process.env.TZ;else process.env.TZ=oldTZ;}
 });
 
 test('BOOK-02 DST gaps are disabled and repeated times choose the earlier occurrence',()=>{
-  const c=scheduleContext();
+  const c=scheduleContext('America/Toronto');
   assert.equal(c.combineLocalDateTime('2027-03-14','02:30'),null);
-  assert.equal(c.combineLocalDateTime('2026-11-01','01:30').toISOString(),'2026-11-01T07:30:00.000Z');
+  assert.equal(c.combineLocalDateTime('2026-11-01','01:30').toISOString(),'2026-11-01T05:30:00.000Z');
   assert.equal(c.combineLocalDateTime('2026-02-30','16:00'),null);
   c.location.search='?week='+Date.parse('2027-03-08T07:00:00Z')/1000;
   assert.equal(c.gridTimestamp(c.weekStartFromParam(),6,150),null);
@@ -48,7 +60,7 @@ test('BOOK-02 DST gaps are disabled and repeated times choose the earlier occurr
 });
 
 test('BOOK-02 booking cells submit the exact studio instant in every supported zone',()=>{
-  for(const [zone,expected] of Object.entries({'America/Edmonton':'2026-11-01T23:00:00Z',
+  for(const [zone,expected] of Object.entries({'America/Edmonton':'2026-11-01T22:00:00Z',
     'America/Vancouver':'2026-11-01T23:00:00Z','America/Toronto':'2026-11-01T21:00:00Z','UTC':'2026-11-01T16:00:00Z'})){
     const c=scheduleContext(zone),start=Date.parse(expected)/1000;
     c.schedule.availability=[{id:1,start,end:start+7200}];

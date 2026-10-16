@@ -1,0 +1,2 @@
+# Preserve the exact source bytes hashed by release_manifest.json on every OS.
+* text=auto eol=lf

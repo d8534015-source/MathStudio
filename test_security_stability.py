@@ -19,6 +19,7 @@ class BackendCase(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.env = mock.patch.dict(os.environ, {'MATH_DATA': self.temp.name,
                                                'PUBLIC_ORIGIN': '',
+                                               'MATH_CONFIG': str(Path(self.temp.name)/'private_config.json'),
                                                'CLOUDFLARE_TURN_KEY_ID': '',
                                                'CLOUDFLARE_TURN_API_TOKEN': '',
                                                'MATH_TRUSTED_PROXIES': ''})
