@@ -1,7 +1,7 @@
 """First-party English/Chinese teacher-facing UI strings.
 
-Keep server/user content unchanged. This module translates only known interface text,
-so a student's name, announcement, or chat message is never machine-translated.
+Translate only first-party interface text. Callers must use content_label or an
+explicit content boundary for names, messages, titles and resource labels.
 """
 import json
 import os
@@ -114,7 +114,71 @@ ZH = {
   'No student yet':'暂无学生',
 }
 
+# Annotation controls, dialogs and launcher UI; placeholders preserve user content.
+ZH.update({
+    'Port 5051 belongs to another MathStudio build. Stop it and start the v41.6.6 website.': '端口 5051 正由其他版本的 MathStudio 使用。请停止该进程并启动 v41.6.6 网站。',
+    'Saving annotation…': '正在保存标注…',
+    'Clear every shared annotation for everyone?': '确定为所有人清空共享标注吗？',
+    'Sharing your desktop · students see this screen and the shared annotation layer': '正在共享桌面 · 学生可以看到此屏幕及共享标注',
+    'Screen sharing stopped': '屏幕共享已停止',
+    'MathStudio · You are sharing this screen': 'MathStudio · 正在共享此屏幕',
+    'Class ended.': '课程已结束。',
+    'The classroom is now closed.': '课堂现已关闭。',
+    'MathStudio annotation': 'MathStudio 标注',
+    'Text or math symbols:': '文字或数学符号：',
+    'Nothing from this teacher session to undo.': '本次教师会话没有可撤销的标注。',
+    'Full meeting window opened · camera, microphone, participants, chat, and annotations are available there': '完整课堂窗口已打开 · 可在其中使用摄像头、麦克风、成员列表、聊天及标注',
+    'End this class for the teacher and all students?': '确定为教师和所有学生结束此课程吗？',
+    'Exit this meeting?\n\nClosing the Teacher Meeting window will end the classroom for students and remove it from the active class list.': '退出此课堂吗？\n\n关闭教师课堂窗口将结束学生的课堂，并将其从当前课程列表中移除。',
+    'MathStudio Teacher App': 'MathStudio 教师端',
+    'Desktop meeting controls & system-wide annotations': '桌面课堂控制与全屏标注',
+    'How to start a class': '如何开始课程',
+    '1. Keep the MathStudio server running.\n2. Open Admin in the website.\n3. Under Confirmed classes, press Start teacher app.\n4. This window becomes the live meeting toolbar and the desktop overlay opens automatically.': '1. 保持 MathStudio 服务器运行。\n2. 打开网站的管理页面。\n3. 在已确认课程中点击“启动教师端”。\n4. 此窗口将变为课堂工具栏，并自动打开桌面标注层。',
+    'Server connected ✓  ·  Start a confirmed class from Admin.': '服务器已连接 ✓ · 请从管理页面开始已确认的课程。',
+    'If the Admin button says the app opened but no toolbar appears, leave this window open and try Start teacher app again. The live toolbar now has a normal Windows taskbar/Alt+Tab entry.': '如果管理按钮提示应用已打开但未出现工具栏，请保持此窗口打开并重试“启动教师端”。课堂工具栏可通过 Windows 任务栏或 Alt+Tab 切换。',
+    'Annotation synced · student drawings appear here automatically': '标注已同步 · 学生的绘画将自动显示在此处',
+    'Media command sent · allow browser permission if prompted in the video panel': '媒体指令已发送 · 如视频面板提示，请允许浏览器权限',
+    'Screen sharing needs Pillow. Restart the Teacher App; its launcher will install it automatically.': '屏幕共享需要 Pillow。请重启教师端，启动器将自动安装所需依赖。',
+    'This classroom has ended.': '此课堂已结束。',
+    'Student annotation enabled.': '已允许学生标注。',
+    'Students are view-only.': '学生仅可观看。',
+    'Could not open the teacher meeting app.\n\n{0}': '无法打开教师课堂应用。\n\n{0}',
+    'MathStudio could not confirm that the class ended:\n\n': 'MathStudio 无法确认课程已结束：\n\n',
+    '\n\nClose the app anyway?': '\n\n仍要关闭应用吗？',
+    'Open MathStudio Admin': '打开 MathStudio 管理页面',
+    'Check server': '检查服务器',
+    'Server not reachable · ': '无法连接服务器 · ',
+    'Server: {0}': '服务器：{0}',
+    'Request failed.': '请求失败。',
+    'Close': '关闭',
+    'Weekly confirmation': '每周课程确认',
+    'How many weeks total?': '总共安排多少周？',
+    'Group name:': '群组名称：',
+    'Label for this file bundle:': '此资料包的名称：',
+    'Meeting title:': '课堂标题：',
+    'Document translation': '文档翻译',
+    'Enable automatic English/Chinese document translation for this share code?\n\nStudents will see a translated reading view when the file type is supported. Translation uses an online translation service.': '为此分享码启用英中文档自动翻译吗？\n\n对于支持的文件类型，学生将看到翻译阅读视图。翻译使用在线翻译服务。',
+    'Uploaded {0} file(s).': '已上传 {0} 个文件。',
+    'Posted {0} group lesson(s).': '已发布 {0} 节小班课。',
+    'Access code: {0}\n\nTranslation: {1}\nThe code was copied to the clipboard.': '分享码：{0}\n\n翻译：{1}\n分享码已复制到剪贴板。',
+    'Your teacher meeting is opening now.\n\nShare code: {0}\n\nOnly students need this code. They can choose Join meeting and enter it signed in or as a guest.\n\nThe code was copied to your clipboard.': '正在打开教师课堂。\n\n分享码：{0}\n\n只有学生需要此代码。学生可选择“加入课堂”，登录或以访客身份输入代码。\n\n代码已复制到剪贴板。',
+    '\n\nThe meeting was created, but the native meeting window did not open automatically: ': '\n\n课堂已创建，但未能自动打开原生课堂窗口：',
+    'The meeting started, but the classroom window could not open automatically.\n': '课堂已开始，但未能自动打开课堂窗口。\n',
+    'The classroom opened, but the native meeting window could not be launched automatically.\n': '课堂已打开，但未能自动启动原生课堂窗口。\n',
+    'On': '开',
+    'Off': '关',
+    'Members: ': '成员：',
+    'Lesson: ': '课程：',
+    'Could not sync annotation: ': '无法同步标注：',
+})
+
 PATTERNS = [
+ (r'^Timezone: (.+)$', lambda m:'时区：'+m[1]),
+ (r'^Could not sync annotation: (.*)$', lambda m:'无法同步标注：'+m[1]),
+ (r'^Could not open meeting window: (.*)$', lambda m:'无法打开课堂窗口：'+m[1]),
+ (r'^Media control failed: (.*)$', lambda m:'媒体控制失败：'+m[1]),
+ (r'^Screen share reconnecting… (.*)$', lambda m:'屏幕共享正在重连… '+m[1]),
+ (r'^Uploading (.+)$', lambda m:'正在上传 '+m[1]),
  (r'^● Connected · auto-updated (.+)$', lambda m:'● 已连接 · 自动更新于 '+m[1]),
  (r'^● Connected · (.+)$', lambda m:'● 已连接 · '+m[1]),
  (r'^(\d+) waiting$', lambda m:m[1]+' 项待处理'),
@@ -162,3 +226,23 @@ def translate(value,lang='zh'):
         m=re.fullmatch(exp,value)
         if m:return render(m)
     return value
+
+
+def content_label(factory, *args, **kwargs):
+    """A label displaying user/server content, excluded from UI translation."""
+    widget = factory(*args, **kwargs)
+    widget._mathstudio_no_translate = True
+    return widget
+
+
+def localize_value(widget, key, current, translate):
+    """Remember canonical UI text per heading/cell across language switches."""
+    cache = getattr(widget, '_mathstudio_ui_sources', None)
+    if cache is None:
+        cache = widget._mathstudio_ui_sources = {}
+    source, previous = cache.get(key, (current, current))
+    if current != previous and current != source:
+        source = current
+    displayed = translate(source)
+    cache[key] = (source, displayed)
+    return displayed

@@ -208,6 +208,8 @@ class TeacherMeetingApp:
 
     def apply_toolbar_language(self, widget=None):
         widget = widget or self.toolbar
+        if getattr(widget, '_mathstudio_no_translate', False):
+            return
         try:
             source = getattr(widget, '_mathstudio_en_text', None)
             if source is None and isinstance(widget, tk.Label):
@@ -228,6 +230,8 @@ class TeacherMeetingApp:
         self.lang = 'zh' if self.lang == 'en' else 'en'
         save_language(self.lang)
         self.apply_toolbar_language()
+        if self.share_canvas:
+            self.share_canvas.itemconfigure("share-label", text=self.tr("MathStudio · You are sharing this screen"))
         for var in (self.status_var, self.people_var, self.mode_var, self.student_var):
             var.refresh()
         self.refresh_button_states()
@@ -344,13 +348,14 @@ class TeacherMeetingApp:
         try:
             state = http_json(self.server + "/api/teacher-app/state?" + urlencode({"token": self.token}))
         except Exception as ex:
-            messagebox.showerror(APP_NAME, f"Could not open the teacher meeting app.\n\n{ex}", parent=self.toolbar)
+            messagebox.showerror(APP_NAME, self.tr('Could not open the teacher meeting app.\n\n{0}').format(ex), parent=self.toolbar)
             self.closed = True
             self.root.after(50, self.root.destroy)
             return
         cl = state.get("class") or {}
         self.class_id = int(cl.get("id") or 0)
         self.title = cl.get("title") or "MathStudio meeting"
+        self.title_label._mathstudio_no_translate = True
         self.title_label.configure(text=self.title)
         self.connected = bool(cl.get("live"))
         self.board = state.get("board") or {"background": "blank", "shapes": []}
@@ -551,7 +556,7 @@ class TeacherMeetingApp:
             self.erase_at(x, y)
             return
         if self.tool == "text":
-            text = simpledialog.askstring("MathStudio annotation", "Text or math symbols:", parent=self.toolbar)
+            text = simpledialog.askstring(self.tr('MathStudio annotation'), self.tr('Text or math symbols:'), parent=self.toolbar)
             if text and text.strip():
                 self.commit_shape({**self.new_shape("text"), "x": x, "y": y, "text": text.strip()[:300]})
             return
@@ -686,11 +691,14 @@ class TeacherMeetingApp:
         self.toolbar.lift()
 
     # ---------- Sync ----------
-    def save_board(self, next_board, own_id=None):
+    def save_board(self, next_board, own_id=None, clear=False):
         if self.saving or not self.connected:
             return
         self.saving = True
         version = self.version
+        # Rebase removals by ID; never replace concurrent participants' shapes.
+        retained = {s.get("id") for s in next_board.get("shapes", [])}
+        removed = {s.get("id") for s in self.board.get("shapes", [])} - retained
         self.status_var.set("Saving annotation…")
 
         def work():
@@ -713,7 +721,8 @@ class TeacherMeetingApp:
                                 else:
                                     next_board = current
                             else:
-                                next_board = current
+                                next_board = {**current, "shapes": [] if clear else [
+                                    s for s in current.get("shapes", []) if s.get("id") not in removed]}
                             continue
                         raise
             except Exception as ex:
@@ -726,7 +735,9 @@ class TeacherMeetingApp:
             if result[0] == "ok":
                 self.version = int(result[1].get("version") or self.version)
                 self.board = result[2]
-                if own_id:
+                present = {s.get("id") for s in self.board.get("shapes", [])}
+                self.my_shapes = [sid for sid in self.my_shapes if sid in present]
+                if own_id and own_id in present and own_id not in self.my_shapes:
                     self.my_shapes.append(own_id)
                 self.status_var.set("Annotation synced · student drawings appear here automatically")
             else:
@@ -747,15 +758,13 @@ class TeacherMeetingApp:
         if not target:
             self.status_var.set("Nothing from this teacher session to undo.")
             return
-        self.my_shapes = [x for x in self.my_shapes if x != target.get("id")]
         self.save_board({**self.board, "shapes": [s for s in self.board.get("shapes", []) if s.get("id") != target.get("id")]})
 
     def clear_all(self):
         if self.saving:
             return
-        if messagebox.askyesno(APP_NAME, "Clear every shared annotation for everyone?", parent=self.toolbar):
-            self.my_shapes.clear()
-            self.save_board({**self.board, "shapes": []})
+        if messagebox.askyesno(APP_NAME, self.tr('Clear every shared annotation for everyone?'), parent=self.toolbar):
+            self.save_board({**self.board, "shapes": []}, clear=True)
 
     def toggle_student_drawing(self):
         desired = not self.students_can_draw
@@ -890,12 +899,12 @@ class TeacherMeetingApp:
         try:
             from PIL import ImageGrab, Image
         except Exception:
-            messagebox.showerror(APP_NAME,"Screen sharing needs Pillow. Restart the Teacher App; its launcher will install it automatically.",parent=self.toolbar)
+            messagebox.showerror(APP_NAME,self.tr('Screen sharing needs Pillow. Restart the Teacher App; its launcher will install it automatically.'),parent=self.toolbar)
             return
         try:
             http_json(self.server+"/api/teacher-app/screen","POST",{"token":self.token,"active":True})
         except Exception as ex:
-            messagebox.showerror(APP_NAME,str(ex),parent=self.toolbar); return
+            messagebox.showerror(APP_NAME,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.toolbar); return
         self.screen_sharing=True; self.screen_stop.clear(); self.open_share_indicator(); self.refresh_people()
         self.status_var.set("Sharing your desktop · students see this screen and the shared annotation layer")
         def capture_loop():
@@ -947,7 +956,7 @@ class TeacherMeetingApp:
         c=tk.Canvas(win,bg=TRANSPARENT,highlightthickness=0,bd=0); self.share_canvas=c; c.pack(fill="both",expand=True)
         c.create_rectangle(3,3,w-4,h-4,outline="#ef4444",width=5)
         c.create_rectangle(w/2-170,8,w/2+170,48,fill="#b91c1c",outline="")
-        c.create_text(w/2,28,text="MathStudio · You are sharing this screen",fill="white",font=("Segoe UI",11,"bold"))
+        c.create_text(w/2,28,text=self.tr("MathStudio · You are sharing this screen"),tags="share-label",fill="white",font=("Segoe UI",11,"bold"))
         win.deiconify(); win.update(); self._style_clickthrough(win); self.toolbar.lift()
 
     def close_share_indicator(self):
@@ -957,29 +966,29 @@ class TeacherMeetingApp:
         self.share_overlay=None; self.share_canvas=None
 
     def end_class(self):
-        if not messagebox.askyesno(APP_NAME, "End this class for the teacher and all students?", parent=self.toolbar):
+        if not messagebox.askyesno(APP_NAME, self.tr('End this class for the teacher and all students?'), parent=self.toolbar):
             return
         self.end_btn.configure(state="disabled")
         try:
             http_json(self.server + "/api/teacher-app/end", "POST", {"token": self.token})
         except Exception as ex:
             self.end_btn.configure(state="normal")
-            messagebox.showerror(APP_NAME, str(ex), parent=self.toolbar)
+            messagebox.showerror(APP_NAME, self.tr('Request failed.')+"\n\n"+str(ex), parent=self.toolbar)
             return
         self.connected = False
         self.status_var.set("Class ended.")
-        messagebox.showinfo(APP_NAME, "The classroom is now closed.", parent=self.toolbar)
+        messagebox.showinfo(APP_NAME, self.tr('The classroom is now closed.'), parent=self.toolbar)
         self.close(force=True)
 
     def on_close(self):
         if self.connected:
-            choice = messagebox.askyesno(APP_NAME, "Exit this meeting?\n\nClosing the Teacher Meeting window will end the classroom for students and remove it from the active class list.", parent=self.toolbar)
+            choice = messagebox.askyesno(APP_NAME, self.tr('Exit this meeting?\n\nClosing the Teacher Meeting window will end the classroom for students and remove it from the active class list.'), parent=self.toolbar)
             if not choice:
                 return
             try:
                 http_json(self.server + "/api/teacher-app/end", "POST", {"token": self.token})
             except Exception as ex:
-                if not messagebox.askyesno(APP_NAME, "MathStudio could not confirm that the class ended:\n\n"+str(ex)+"\n\nClose the app anyway?", parent=self.toolbar):
+                if not messagebox.askyesno(APP_NAME, self.tr('MathStudio could not confirm that the class ended:\n\n') + str(ex) + self.tr('\n\nClose the app anyway?'), parent=self.toolbar):
                     return
         self.close(force=True)
 
@@ -1017,31 +1026,29 @@ def parse_args():
 
 
 def show_launcher(server: str):
+    tr = lambda text: translate_ui(text, read_language())
     root = tk.Tk()
-    root.title("MathStudio Teacher App")
+    root.title(tr('MathStudio Teacher App'))
     root.geometry("620x430+120+100")
     root.minsize(560, 390)
     root.configure(bg="#0f1720")
 
     wrap = tk.Frame(root, bg="#0f1720", padx=28, pady=24)
     wrap.pack(fill="both", expand=True)
-    tk.Label(wrap, text="MathStudio Teacher App", bg="#0f1720", fg="#f4f7f8",
+    tk.Label(wrap, text=tr('MathStudio Teacher App'), bg="#0f1720", fg="#f4f7f8",
              font=("Segoe UI", 21, "bold"), anchor="w").pack(fill="x")
-    tk.Label(wrap, text="Desktop meeting controls & system-wide annotations", bg="#0f1720",
+    tk.Label(wrap, text=tr('Desktop meeting controls & system-wide annotations'), bg="#0f1720",
              fg="#9fb2bc", font=("Segoe UI", 10), anchor="w").pack(fill="x", pady=(2, 20))
 
     card = tk.Frame(wrap, bg="#16212c", padx=20, pady=18, highlightbackground="#2c3e49", highlightthickness=1)
     card.pack(fill="x")
-    tk.Label(card, text="How to start a class", bg="#16212c", fg="#f4f7f8",
+    tk.Label(card, text=tr('How to start a class'), bg="#16212c", fg="#f4f7f8",
              font=("Segoe UI", 13, "bold"), anchor="w").pack(fill="x")
-    tk.Label(card, text=("1. Keep the MathStudio server running.\n"
-                         "2. Open Admin in the website.\n"
-                         "3. Under Confirmed classes, press Start teacher app.\n"
-                         "4. This window becomes the live meeting toolbar and the desktop overlay opens automatically."),
+    tk.Label(card, text=(tr('1. Keep the MathStudio server running.\n2. Open Admin in the website.\n3. Under Confirmed classes, press Start teacher app.\n4. This window becomes the live meeting toolbar and the desktop overlay opens automatically.')),
              bg="#16212c", fg="#c5d1d6", justify="left", anchor="w",
              font=("Segoe UI", 10)).pack(fill="x", pady=(8, 14))
 
-    status = tk.StringVar(value=f"Server: {server}")
+    status = tk.StringVar(value=tr("Server: {0}").format(server))
     tk.Label(card, textvariable=status, bg="#16212c", fg="#9fb2bc", anchor="w").pack(fill="x", pady=(0, 12))
 
     buttons = tk.Frame(card, bg="#16212c")
@@ -1050,9 +1057,9 @@ def show_launcher(server: str):
     def check_server():
         try:
             http_json(server.rstrip('/') + "/api/public", timeout=3)
-            status.set("Server connected ✓  ·  Start a confirmed class from Admin.")
+            status.set(tr('Server connected ✓  ·  Start a confirmed class from Admin.'))
         except Exception as ex:
-            status.set("Server not reachable · " + str(ex))
+            status.set(tr("Server not reachable · ") + str(ex))
 
     def open_admin():
         webbrowser.open(server.rstrip('/') + "/admin", new=1, autoraise=True)
@@ -1062,12 +1069,12 @@ def show_launcher(server: str):
                          activebackground="#157d74", activeforeground="white", relief="flat",
                          bd=0, padx=16, pady=10, cursor="hand2", font=("Segoe UI", 10, "bold"))
 
-    button("Open MathStudio Admin", open_admin, "#157d74").pack(side="left", padx=(0, 8))
-    button("Check server", check_server, "#31505f").pack(side="left")
+    button(tr('Open MathStudio Admin'), open_admin, "#157d74").pack(side="left", padx=(0, 8))
+    button(tr('Check server'), check_server, "#31505f").pack(side="left")
 
     helpbox = tk.Frame(wrap, bg="#0f1720", pady=18)
     helpbox.pack(fill="x")
-    tk.Label(helpbox, text="If the Admin button says the app opened but no toolbar appears, leave this window open and try Start teacher app again. The live toolbar now has a normal Windows taskbar/Alt+Tab entry.",
+    tk.Label(helpbox, text=tr('If the Admin button says the app opened but no toolbar appears, leave this window open and try Start teacher app again. The live toolbar now has a normal Windows taskbar/Alt+Tab entry.'),
              bg="#0f1720", fg="#9fb2bc", justify="left", wraplength=550, anchor="w").pack(fill="x")
 
     root.after(250, check_server)

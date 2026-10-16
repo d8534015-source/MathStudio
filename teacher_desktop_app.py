@@ -18,7 +18,7 @@ import http.cookiejar
 from datetime import datetime, timedelta
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
-from teacher_localization import translate as translate_ui, read_language, save_language
+from teacher_localization import translate as translate_ui, read_language, save_language, content_label, localize_value
 from studio_time import studio_zone, parse_local
 
 ROOT = Path(__file__).resolve().parent
@@ -600,10 +600,10 @@ class TeacherDesktopApp:
         userbox = tk.Frame(side, bg='#154149', padx=13, pady=11)
         userbox.pack(fill='x', padx=10, pady=(8,10))
         initials = ''.join(x[0] for x in (self.client.user or {}).get('name','Teacher').split()[:2]).upper() or 'T'
-        tk.Label(userbox, text=initials, bg='#dff5ed', fg='#0f766e', font=('Segoe UI', 9, 'bold'), width=3, height=1).pack(side='left')
+        content_label(tk.Label, userbox, text=initials, bg='#dff5ed', fg='#0f766e', font=('Segoe UI', 9, 'bold'), width=3, height=1).pack(side='left')
         ui = tk.Frame(userbox, bg='#154149')
         ui.pack(side='left', padx=(9,0), fill='x', expand=True)
-        tk.Label(ui, text=(self.client.user or {}).get('name','Teacher'), bg='#154149', fg='white', font=('Segoe UI', 9, 'bold')).pack(anchor='w')
+        content_label(tk.Label, ui, text=(self.client.user or {}).get('name','Teacher'), bg='#154149', fg='white', font=('Segoe UI', 9, 'bold')).pack(anchor='w')
         tk.Label(ui, text='Administrator', bg='#154149', fg='#9fc7c3', font=('Segoe UI', 8)).pack(anchor='w')
         tk.Button(side, text='↻  Refresh data', anchor='w', relief='flat', bd=0, padx=20, pady=9, bg='#0d2f34', fg='#a9c9c6', activebackground='#165158', activeforeground='white', command=self.refresh_all).pack(fill='x')
         tk.Button(side, text='↪  Sign out', anchor='w', relief='flat', bd=0, padx=20, pady=9, bg='#0d2f34', fg='#f0b9bd', activebackground='#165158', activeforeground='white', command=self.sign_out).pack(fill='x', pady=(0,14))
@@ -746,6 +746,10 @@ class TeacherDesktopApp:
         Never modify entry fields, chat bodies or arbitrary user-supplied content.
         Widget text and known enum/status columns are UI strings only.
         """
+        if getattr(widget, '_mathstudio_no_translate', False):
+            return
+        if hasattr(widget, '_mathstudio_title'):
+            widget.title(self.tr(widget._mathstudio_title))
         try:
             if hasattr(widget, 'cget'):
                 current = widget.cget('text')
@@ -767,7 +771,7 @@ class TeacherDesktopApp:
             for col in cols + (['#0'] if widget['show'] and 'tree' in str(widget['show']) else []):
                 try:
                     source = widget.heading(col, 'text')
-                    widget.heading(col, text=self.tr(source))
+                    widget.heading(col, text=localize_value(widget, ('heading', col), source, self.tr))
                 except tk.TclError:
                     pass
             # Only translate controlled status/role columns, never usernames,
@@ -777,19 +781,20 @@ class TeacherDesktopApp:
                 'users_tree': (2,), 'codes_tree': (3,4),
             }
             indices = fixed_indices.get(next((k for k,v in self.__dict__.items() if v is widget),''), ())
-            if self.lang == 'zh' and indices:
+            if indices:
                 for iid in widget.get_children(''):
                     try:
                         original = list(widget.item(iid,'values'))
                         for i in indices:
-                            if i < len(original): original[i] = self.tr(original[i])
+                            if i < len(original):
+                                original[i] = localize_value(widget, ('value', iid, i), original[i], self.tr)
                         widget.item(iid,values=original)
                     except tk.TclError:
                         pass
-            if self.lang == 'zh' and widget is getattr(self, 'groups_tree', None):
+            if widget is getattr(self, 'groups_tree', None):
                 for iid in ('section-groups','section-lessons'):
                     if widget.exists(iid):
-                        widget.item(iid,text=self.tr(widget.item(iid,'text')))
+                        widget.item(iid,text=localize_value(widget, ('section', iid), widget.item(iid,'text'), self.tr))
         try:
             for child in widget.winfo_children():
                 self.apply_language(child)
@@ -840,8 +845,12 @@ class TeacherDesktopApp:
             'settings':('Student site','Public website details and announcements')
         }
         title, subtitle = meta[key]
+        self.page_title._mathstudio_en_text = title
         self.page_title.config(text=self.tr(title))
+        self.page_title._mathstudio_display_text = self.tr(title)
+        self.page_subtitle._mathstudio_en_text = subtitle
         self.page_subtitle.config(text=self.tr(subtitle))
+        self.page_subtitle._mathstudio_display_text = self.tr(subtitle)
         for k,b in self.sidebar_buttons.items():
             active = k == key
             b.config(bg='#176c67' if active else '#0d2f34', fg='white' if active else '#dcebea')
@@ -865,17 +874,17 @@ class TeacherDesktopApp:
         except Exception as ex:
             self.status_label.config(text='● Connection problem', bg='#fff0f0', fg='#a52b37')
             self.apply_language(self.status_label)
-            messagebox.showerror(APP_TITLE, str(ex), parent=self.root)
+            messagebox.showerror(APP_TITLE, self.tr('Request failed.')+"\n\n"+str(ex), parent=self.root)
 
     def card(self, parent, title, value, note='', accent='#0f766e'):
         f = tk.Frame(parent, bg='white', highlightbackground='#dfe7ea', highlightthickness=1, padx=18, pady=16)
         tk.Frame(f, bg=accent, width=4, height=42).pack(side='left', fill='y', padx=(0,13))
         body = tk.Frame(f, bg='white')
         body.pack(side='left', fill='both', expand=True)
-        tk.Label(body, text=self.tr(title.upper()), bg='white', fg='#6b7c84', font=('Segoe UI', 8, 'bold')).pack(anchor='w')
-        tk.Label(body, text=str(value), bg='white', fg='#172a33', font=('Segoe UI', 23, 'bold')).pack(anchor='w', pady=(2,0))
+        tk.Label(body, text=title.upper(), bg='white', fg='#6b7c84', font=('Segoe UI', 8, 'bold')).pack(anchor='w')
+        content_label(tk.Label, body, text=str(value), bg='white', fg='#172a33', font=('Segoe UI', 23, 'bold')).pack(anchor='w', pady=(2,0))
         if note:
-            tk.Label(body, text=self.tr(note), bg='white', fg='#7c8b91', font=('Segoe UI', 8)).pack(anchor='w')
+            tk.Label(body, text=note, bg='white', fg='#7c8b91', font=('Segoe UI', 8)).pack(anchor='w')
         return f
 
 
@@ -939,9 +948,9 @@ class TeacherDesktopApp:
             dot=tk.Label(row,text='●',bg='white',fg='#0f766e',font=('Segoe UI',9))
             dot.pack(side='left',anchor='n',padx=(0,9),pady=1)
             text=tk.Frame(row,bg='white'); text.pack(side='left',fill='x',expand=True)
-            tk.Label(text,text=c.get('title','Class'),bg='white',fg='#172a33',font=('Segoe UI',10,'bold')).pack(anchor='w')
+            content_label(tk.Label, text,text=c.get('title','Class'),bg='white',fg='#172a33',font=('Segoe UI',10,'bold')).pack(anchor='w')
             tk.Label(text,text=info,bg='white',fg='#60727a',font=('Segoe UI',9)).pack(anchor='w',pady=(1,0))
-            tk.Label(text,text=names,bg='white',fg='#829096',font=('Segoe UI',8)).pack(anchor='w')
+            content_label(tk.Label, text,text=names,bg='white',fg='#829096',font=('Segoe UI',8)).pack(anchor='w')
 
         right = tk.Frame(body, bg='white', highlightbackground='#dfe7ea', highlightthickness=1, padx=20, pady=18)
         right.grid(row=0,column=1,sticky='nsew')
@@ -951,7 +960,7 @@ class TeacherDesktopApp:
         tk.Label(right,text='Students use this site for booking, resources, messages, and joining lessons.',bg='white',fg='#718188',font=('Segoe UI',9),wraplength=360,justify='left').pack(anchor='w')
         linkbox=tk.Frame(right,bg='#f5f8f8',highlightbackground='#dce6e7',highlightthickness=1,padx=12,pady=11)
         linkbox.pack(fill='x',pady=(16,10))
-        self.student_link_label=tk.Label(linkbox,text=self.secure_origin or self.student_origin,bg='#f5f8f8',fg='#0f766e',font=('Consolas',9),wraplength=340,justify='left')
+        self.student_link_label=content_label(tk.Label, linkbox,text=self.secure_origin or self.student_origin,bg='#f5f8f8',fg='#0f766e',font=('Consolas',9),wraplength=340,justify='left')
         self.student_link_label.pack(anchor='w')
         ttk.Button(right,text='Copy student link',style='Accent.TButton',command=self.copy_student_link).pack(fill='x',pady=(2,6))
         ttk.Button(right,text='Refresh website link',style='Quiet.TButton',command=self.refresh_student_link).pack(fill='x')
@@ -972,13 +981,13 @@ class TeacherDesktopApp:
             self.status_label.config(text='Website link refreshed')
             self.apply_language(self.status_label)
         except Exception as ex:
-            messagebox.showerror(APP_TITLE, str(ex), parent=self.root)
+            messagebox.showerror(APP_TITLE, self.tr('Request failed.')+"\n\n"+str(ex), parent=self.root)
 
     # ----- Schedule -----
     def page_schedule(self):
         actions=ttk.Frame(self.content,style='Soft.TFrame',padding=12); actions.pack(fill='x',pady=(0,10))
         ttk.Label(actions,text='Teaching schedule',style='Soft.TLabel',font=('Segoe UI',11,'bold')).pack(side='left')
-        ttk.Label(actions,text=self.tr('Timezone')+': '+self.studio_zone_name(),style='Soft.TLabel',foreground='#667982').pack(side='left',padx=(10,0))
+        ttk.Label(actions,text='Timezone: '+self.studio_zone_name(),style='Soft.TLabel',foreground='#667982').pack(side='left',padx=(10,0))
         ttk.Button(actions,text='Add availability',style='Quiet.TButton',command=self.open_availability_dialog).pack(side='right')
         ttk.Button(actions,text='Post group lesson',style='Quiet.TButton',command=self.open_group_class_dialog).pack(side='right',padx=(0,8))
         cal=ttk.Frame(self.content,style='Card.TFrame',padding=12); cal.pack(fill='both',expand=True)
@@ -1002,20 +1011,22 @@ class TeacherDesktopApp:
         self.draw_calendar()
 
     def open_availability_dialog(self):
-        win=tk.Toplevel(self.root);win.title('Add private availability');win.transient(self.root)
+        win=tk.Toplevel(self.root);win.title(self.tr('Add private availability'));win._mathstudio_title='Add private availability';win.transient(self.root)
         w=min(760,max(520,int(self.root.winfo_width()*0.62)));h=420
         win.geometry(f'{w}x{h}')
         frame=self._availability_card(win);frame.pack(fill='both',expand=True,padx=16,pady=16)
-        ttk.Label(win,text=self.tr('Timezone')+': '+self.studio_zone_name()).pack(pady=(0,6))
+        ttk.Label(win,text='Timezone: '+self.studio_zone_name()).pack(pady=(0,6))
         ttk.Button(win,text='Close',command=win.destroy).pack(pady=(0,14))
+        self.apply_language(win)
 
     def open_group_class_dialog(self):
-        win=tk.Toplevel(self.root);win.title('Post group lesson');win.transient(self.root)
+        win=tk.Toplevel(self.root);win.title(self.tr('Post group lesson'));win._mathstudio_title='Post group lesson';win.transient(self.root)
         w=min(820,max(560,int(self.root.winfo_width()*0.68)));h=600
         win.geometry(f'{w}x{h}')
         frame=self._group_class_card(win);frame.pack(fill='both',expand=True,padx=16,pady=16)
-        ttk.Label(win,text=self.tr('Timezone')+': '+self.studio_zone_name()).pack(pady=(0,6))
+        ttk.Label(win,text='Timezone: '+self.studio_zone_name()).pack(pady=(0,6))
         ttk.Button(win,text='Close',command=win.destroy).pack(pady=(0,14))
+        self.apply_language(win)
 
     def _availability_card(self,parent):
         f=ttk.Frame(parent,style='Card.TFrame',padding=16)
@@ -1039,7 +1050,7 @@ class TeacherDesktopApp:
                 st=parse_local(date_var.get(),start_var.get(),self.studio_zone_name()); en=parse_local(end_date.get(),end_var.get(),self.studio_zone_name())
                 self.client.json('/api/admin/availability',{'start':st,'end':en,'repeat_weekly':weeks.get()>1,'weeks':weeks.get()})
                 self.refresh_all(); messagebox.showinfo(APP_TITLE,self.tr('Availability added.'),parent=self.root)
-            except Exception as ex: messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+            except Exception as ex: messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
         ttk.Button(f,text='Add to schedule',command=add).grid(row=5,column=1,columnspan=3,sticky='e')
         for i in range(4):f.columnconfigure(i,weight=1)
         return f
@@ -1066,8 +1077,8 @@ class TeacherDesktopApp:
             try:
                 idx=lesson_labels.index(lessonvar.get()); lesson=lessons[idx]
                 payload={'title':title.get().strip(),'lesson_type_id':lesson['id'],'start':parse_local(datev.get(),timev.get(),self.studio_zone_name()),'capacity':cap.get(),'price_label':price.get().strip() or 'Price TBD','description':desc.get().strip() or 'Small-group lesson','repeat_weekly':weeks.get()>1,'weeks':weeks.get()}
-                out=self.client.json('/api/admin/group-class',payload); self.refresh_all(); messagebox.showinfo(APP_TITLE,f"Posted {out.get('created',1)} group lesson(s).",parent=self.root)
-            except Exception as ex: messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+                out=self.client.json('/api/admin/group-class',payload); self.refresh_all(); messagebox.showinfo(APP_TITLE,self.tr('Posted {0} group lesson(s).').format(out.get('created', 1)),parent=self.root)
+            except Exception as ex: messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
         ttk.Button(f,text='Post group lesson',command=post).grid(row=8,column=0,columnspan=4,sticky='e',pady=(10,0))
         for i in range(4):f.columnconfigure(i,weight=1)
         return f
@@ -1201,19 +1212,19 @@ class TeacherDesktopApp:
         if not sel: return messagebox.showinfo(APP_TITLE,self.tr('Select a pending request first.'),parent=self.root)
         weeks=1
         if action=='confirm_weekly':
-            weeks=simpledialog.askinteger('Weekly confirmation','How many weeks total?',parent=self.root,minvalue=2,maxvalue=24,initialvalue=8)
+            weeks=simpledialog.askinteger(self.tr('Weekly confirmation'),self.tr('How many weeks total?'),parent=self.root,minvalue=2,maxvalue=24,initialvalue=8)
             if not weeks:return
         if action=='reject' and not messagebox.askyesno(APP_TITLE,self.tr('Decline this booking request?'),parent=self.root):return
         try:
             self.client.json('/api/admin/booking-action',{'class_id':int(sel[0]),'action':action,'weeks':weeks}); self.refresh_all()
-        except Exception as ex: messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+        except Exception as ex: messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
 
     def class_action(self,action):
         sel=self.confirmed_tree.selection()
         if not sel:return messagebox.showinfo(APP_TITLE,self.tr('Select a class first.'),parent=self.root)
         if action=='cancel' and not messagebox.askyesno(APP_TITLE,self.tr('Cancel this class?'),parent=self.root):return
         try:self.client.json('/api/admin/class-action',{'class_id':int(sel[0]),'action':action});self.refresh_all()
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
 
     # ----- Students -----
     def page_students(self):
@@ -1233,15 +1244,15 @@ class TeacherDesktopApp:
     def create_group_from_users(self):
         ids=self.selected_user_ids()
         if not ids:return messagebox.showinfo(APP_TITLE,self.tr('Select at least one student.'),parent=self.root)
-        name=simpledialog.askstring('Create group chat','Group name:',parent=self.root)
+        name=simpledialog.askstring(self.tr('Create group chat'),self.tr('Group name:'),parent=self.root)
         if not name:return
         try:self.client.json('/api/admin/groups/create',{'name':name.strip(),'user_ids':ids});self.refresh_all();self.show_page('groups')
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
     def change_role(self,role):
         sel=self.users_tree.selection()
         if len(sel)!=1:return messagebox.showinfo(APP_TITLE,self.tr('Select exactly one account.'),parent=self.root)
         try:self.client.json('/api/admin/role',{'user_id':int(sel[0]),'role':role});self.refresh_all()
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
 
     # ----- Groups & messages -----
     def page_groups(self):
@@ -1327,7 +1338,7 @@ class TeacherDesktopApp:
             if self.active_chat_type=='group':self.client.json('/api/group-messages/send',{'group_id':self.active_chat_id,'text':text})
             else:self.client.json('/api/messages/send',{'class_id':self.active_chat_id,'text':text})
             self.chat_entry.delete(0,'end');self.refresh_group_messages()
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
     def delete_group(self):
         sel=self.groups_tree.selection()
         if not sel or not sel[0].startswith('g-'):
@@ -1335,7 +1346,7 @@ class TeacherDesktopApp:
         gid=int(sel[0].split('-',1)[1])
         if not messagebox.askyesno(APP_TITLE,self.tr('Delete this group and its chat history?'),parent=self.root):return
         try:self.client.json('/api/admin/groups/delete',{'group_id':gid});self.refresh_all()
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
 
     # ----- Files -----
     def page_files(self):
@@ -1343,7 +1354,7 @@ class TeacherDesktopApp:
         ttk.Button(toolbar,text='Upload files…',command=self.upload_files).pack(side='left')
         ttk.Button(toolbar,text='Generate code from selected',command=self.generate_code).pack(side='left',padx=6)
         ttk.Button(toolbar,text='Delete selected file',command=self.delete_file).pack(side='left')
-        storage=self.file_info.get('storage',{});ttk.Label(toolbar,text=f"Storage: {storage.get('label','Local')} ",style='Muted.TLabel').pack(side='right')
+        storage=self.file_info.get('storage',{});content_label(ttk.Label, toolbar,text=f"Storage: {storage.get('label','Local')} ",style='Muted.TLabel').pack(side='right')
         paned=ttk.Panedwindow(self.content,orient='vertical');paned.pack(fill='both',expand=True)
         ff=ttk.Frame(paned,style='Card.TFrame',padding=10);cf=ttk.Frame(paned,style='Card.TFrame',padding=10);paned.add(ff,weight=3);paned.add(cf,weight=2)
         ttk.Label(ff,text='File library',style='Card.TLabel',font=('Segoe UI',12,'bold')).pack(anchor='w')
@@ -1369,42 +1380,42 @@ class TeacherDesktopApp:
             if n<1024 or unit=='GB':return f'{n:.0f} {unit}' if unit=='B' else f'{n:.1f} {unit}'
             n/=1024
     def upload_files(self):
-        paths=filedialog.askopenfilenames(parent=self.root,title='Upload teacher files')
+        paths=filedialog.askopenfilenames(parent=self.root,title=self.tr('Upload teacher files'))
         if not paths:return
         try:
             for p in paths:
                 self.status_label.config(text='Uploading '+Path(p).name);self.root.update_idletasks();self.client.upload_file(Path(p))
-            self.refresh_all();messagebox.showinfo(APP_TITLE,f'Uploaded {len(paths)} file(s).',parent=self.root)
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+            self.refresh_all();messagebox.showinfo(APP_TITLE,self.tr('Uploaded {0} file(s).').format(len(paths)),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
     def generate_code(self):
         ids=[int(x) for x in self.files_tree.selection()]
         if not ids:return messagebox.showinfo(APP_TITLE,self.tr('Select one or more files.'),parent=self.root)
-        label=simpledialog.askstring('Generate access code','Label for this file bundle:',parent=self.root,initialvalue='Shared files')
+        label=simpledialog.askstring(self.tr('Generate access code'),self.tr('Label for this file bundle:'),parent=self.root,initialvalue='Shared files')
         if label is None:return
-        translate_enabled=messagebox.askyesno('Document translation','Enable automatic English/Chinese document translation for this share code?\n\nStudents will see a translated reading view when the file type is supported. Translation uses an online translation service.',parent=self.root)
+        translate_enabled=messagebox.askyesno(self.tr('Document translation'),self.tr('Enable automatic English/Chinese document translation for this share code?\n\nStudents will see a translated reading view when the file type is supported. Translation uses an online translation service.'),parent=self.root)
         try:
             out=self.client.json('/api/admin/files/code',{'file_ids':ids,'label':label,'translate_enabled':translate_enabled});self.refresh_all();
-            self.root.clipboard_clear();self.root.clipboard_append(out['code']);messagebox.showinfo(APP_TITLE,f"Access code: {out['code']}\n\nTranslation: {'On' if translate_enabled else 'Off'}\nThe code was copied to the clipboard.",parent=self.root)
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+            self.root.clipboard_clear();self.root.clipboard_append(out['code']);messagebox.showinfo(APP_TITLE,self.tr('Access code: {0}\n\nTranslation: {1}\nThe code was copied to the clipboard.').format(out['code'], self.tr('On' if translate_enabled else 'Off')),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
     def code_action(self,action):
         sel=self.codes_tree.selection()
         if not sel:return
         try:self.client.json('/api/admin/files/code-action',{'code_id':int(sel[0]),'action':action});self.refresh_all()
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
     def delete_file(self):
         sel=self.files_tree.selection()
         if len(sel)!=1:return messagebox.showinfo(APP_TITLE,self.tr('Select one file.'),parent=self.root)
         if not messagebox.askyesno(APP_TITLE,self.tr('Delete this file from storage?'),parent=self.root):return
         try:self.client.json('/api/admin/files/delete',{'file_id':int(sel[0])});self.refresh_all()
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
 
     # ----- Meetings -----
     def page_meetings(self):
         instant=tk.Frame(self.content,bg='#eaf7f4',highlightbackground='#b9ddd5',highlightthickness=1,padx=22,pady=18);instant.pack(fill='x',pady=(0,16))
         top=tk.Frame(instant,bg='#eaf7f4');top.pack(fill='x')
-        tk.Label(top,text=self.tr('Start an instant meeting'),bg='#eaf7f4',fg='#14343a',font=('Segoe UI',14,'bold')).pack(side='left')
+        tk.Label(top,text='Start an instant meeting',bg='#eaf7f4',fg='#14343a',font=('Segoe UI',14,'bold')).pack(side='left')
         self.action_button(top,'Start instant meeting',self.start_instant_meeting,'primary').pack(side='right')
-        tk.Label(instant,text=self.tr('No scheduled class is required. MathStudio creates a 10-digit code that students can use with an account or as a guest.'),bg='#eaf7f4',fg='#60757b',font=('Segoe UI',9),wraplength=900,justify='left').pack(anchor='w',pady=(6,0))
+        tk.Label(instant,text='No scheduled class is required. MathStudio creates a 10-digit code that students can use with an account or as a guest.',bg='#eaf7f4',fg='#60757b',font=('Segoe UI',9),wraplength=900,justify='left').pack(anchor='w',pady=(6,0))
         ttk.Label(self.content,text='Scheduled meetings',style='H2.TLabel').pack(anchor='w')
         ttk.Label(self.content,text='Select a confirmed class below, or use Instant Meeting above.',style='Muted.TLabel').pack(anchor='w',pady=(2,10))
         a=tk.Frame(self.content,bg='#f2f5f7');a.pack(fill='x',pady=(0,12))
@@ -1439,10 +1450,10 @@ class TeacherDesktopApp:
             self.status_label.config(text='Full classroom opened · updates automatically')
             self.apply_language(self.status_label)
         except Exception as ex:
-            messagebox.showwarning(APP_TITLE,'The meeting started, but the classroom window could not open automatically.\n'+str(ex),parent=self.root)
+            messagebox.showwarning(APP_TITLE,self.tr('The meeting started, but the classroom window could not open automatically.\n') + str(ex),parent=self.root)
 
     def start_instant_meeting(self):
-        title=simpledialog.askstring('Instant meeting','Meeting title:',parent=self.root,initialvalue='Instant math meeting')
+        title=simpledialog.askstring(self.tr('Instant meeting'),self.tr('Meeting title:'),parent=self.root,initialvalue='Instant math meeting')
         if title is None:return
         try:
             instant=self.client.json('/api/admin/instant-meeting',{'title':title.strip() or 'Instant math meeting'})
@@ -1451,11 +1462,11 @@ class TeacherDesktopApp:
             code=instant['code']
             self.root.clipboard_clear();self.root.clipboard_append(code)
             self.refresh_all()
-            detail=f"Your teacher meeting is opening now.\n\nShare code: {code}\n\nOnly students need this code. They can choose Join meeting and enter it signed in or as a guest.\n\nThe code was copied to your clipboard."
+            detail=self.tr('Your teacher meeting is opening now.\n\nShare code: {0}\n\nOnly students need this code. They can choose Join meeting and enter it signed in or as a guest.\n\nThe code was copied to your clipboard.').format(code)
             if not out.get('launched') and not out.get('already_running'):
-                detail += '\n\nThe meeting was created, but the native meeting window did not open automatically: '+out.get('launch_error','')
-            messagebox.showinfo('Instant meeting',detail,parent=self.root)
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+                detail += self.tr('\n\nThe meeting was created, but the native meeting window did not open automatically: ')+out.get('launch_error','')
+            messagebox.showinfo(self.tr('Instant meeting'),detail,parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
 
     def copy_selected_share_code(self):
         tree=getattr(self,'meeting_tree',None);sel=tree.selection() if tree else []
@@ -1476,17 +1487,17 @@ class TeacherDesktopApp:
             out=self.client.json('/api/admin/teacher-app-launch',{'class_id':cid})
             self._open_full_classroom(out.get('browser_url',''))
             if not out.get('launched') and not out.get('already_running'):
-                messagebox.showwarning(APP_TITLE,'The classroom opened, but the native meeting window could not be launched automatically.\n'+out.get('launch_error',''),parent=self.root)
+                messagebox.showwarning(APP_TITLE,self.tr('The classroom opened, but the native meeting window could not be launched automatically.\n') + out.get('launch_error', ''),parent=self.root)
             else:self.status_label.config(text='Teacher meeting started')
             self.apply_language(self.status_label)
             self.refresh_all()
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
     def meeting_class_action(self,action):
         cid=self._selected_class_id()
         if not cid:return
         if action=='cancel' and not messagebox.askyesno(APP_TITLE,self.tr('Cancel this class?'),parent=self.root):return
         try:self.client.json('/api/admin/class-action',{'class_id':cid,'action':action});self.refresh_all()
-        except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+        except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
 
     # ----- Settings -----
     def page_settings(self):
@@ -1504,14 +1515,14 @@ class TeacherDesktopApp:
         def save():
             try:
                 payload={k:v.get() for k,v in fields.items()};payload['intro']=intro.get('1.0','end').strip();payload['about']=about.get('1.0','end').strip();payload['timezone']=timezone.get();self.client.json('/api/admin/settings',payload);self.refresh_all();messagebox.showinfo(APP_TITLE,self.tr('Student website settings saved.'),parent=self.root)
-            except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+            except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
         ttk.Button(site,text='Save website settings',command=save).pack(anchor='e',pady=(12,0))
         ttk.Label(post,text='Publish announcement',style='Card.TLabel',font=('Segoe UI',12,'bold')).pack(anchor='w')
         ttk.Label(post,text='Announcements appear on the student home page.',style='Card.TLabel',foreground='#66767d').pack(anchor='w',pady=(2,8))
         title=tk.StringVar();ttk.Label(post,text='Title',style='Card.TLabel').pack(anchor='w');ttk.Entry(post,textvariable=title).pack(fill='x',pady=(2,8));ttk.Label(post,text='Message',style='Card.TLabel').pack(anchor='w');body=tk.Text(post,height=13,wrap='word');body.pack(fill='both',expand=True,pady=(2,8))
         def publish():
             try:self.client.json('/api/admin/post',{'title':title.get().strip(),'body':body.get('1.0','end').strip()});title.set('');body.delete('1.0','end');messagebox.showinfo(APP_TITLE,self.tr('Announcement published.'),parent=self.root)
-            except Exception as ex:messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
+            except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
         ttk.Button(post,text='Publish',command=publish).pack(anchor='e')
 
     def sign_out(self):
@@ -1519,7 +1530,7 @@ class TeacherDesktopApp:
         except Exception:pass
         self.show_login()
     def on_close(self):
-        if messagebox.askokcancel('Exit MathStudio Teacher','Close the Teacher App? The student website will keep running separately.',parent=self.root):
+        if messagebox.askokcancel(self.tr('Exit MathStudio Teacher'),self.tr('Close the Teacher App? The student website will keep running separately.'),parent=self.root):
             self.root.destroy()
 
     def run(self):

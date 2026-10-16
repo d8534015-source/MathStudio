@@ -77,3 +77,111 @@ test('UI-02 background refresh retains redeemed downloads and translation state'
     assert.equal(context.redemptions,0,'refresh must not redeem the same code repeatedly');
   }
 });
+
+
+test('MEDIA-02 native sharing allows authorized drawing without changing media negotiation',()=>{
+  const source=fs.readFileSync(new URL('./classroom.js',import.meta.url),'utf8');
+  const c={joined:true,saving:false,presenter:null,viewMode:'call',nativeShare:{active:true},drawingAllowed:true,toast(){}};
+  vm.createContext(c);
+  vm.runInContext(source.slice(source.indexOf('function canDraw()'),source.indexOf('\n',source.indexOf('function canDraw()'))),c);
+  assert.equal(c.canDraw(),true);
+  c.drawingAllowed=false;assert.equal(c.canDraw(),false);
+  c.drawingAllowed=true;c.nativeShare.active=false;assert.equal(c.canDraw(),false);
+  c.viewMode='whiteboard';assert.equal(c.canDraw(),true);
+  c.saving=true;assert.equal(c.canDraw(),false);
+  c.saving=false;c.joined=false;assert.equal(c.canDraw(),false);
+});
+
+// Minimal DOM doubles exercise the actual live translator without a browser package.
+class LanguageElement {
+  constructor(tag='div',attrs={},children=[]){
+    this.tag=tag;this.attrs={...attrs};this.nodeType=1;this.children=children;
+    for(const child of children)child.parentElement=this;
+  }
+  getAttribute(key){return this.attrs[key]??null;}
+  setAttribute(key,value){this.attrs[key]=value;}
+  closest(selector){
+    for(let el=this;el;el=el.parentElement){
+      if(selector.split(',').some(s=>s==='[data-no-translate]'?'data-no-translate' in el.attrs:
+        s.startsWith('.')?(el.attrs.class||'').split(' ').includes(s.slice(1)):s===el.tag))return el;
+    }
+    return null;
+  }
+  querySelectorAll(){return this.children.flatMap(x=>x.nodeType===1?[x,...x.querySelectorAll()]:[]);}
+}
+const languageText=value=>({nodeType:3,nodeValue:value});
+function languageContext(){
+  const document={documentElement:{lang:'en'},createTreeWalker(root){
+    const nodes=[];const visit=n=>{for(const child of n.children||[])child.nodeType===3?nodes.push(child):visit(child);};
+    visit(root);let i=0;return {nextNode:()=>nodes[i++]||null};
+  }};
+  const c={siteLang:'zh',document,Node:{TEXT_NODE:3},NodeFilter:{SHOW_TEXT:4}};
+  vm.createContext(c);
+  vm.runInContext(app.slice(app.indexOf('const SITE_ZH='),app.indexOf('function installLanguageObserver()')),c);
+  vm.runInContext(app.slice(app.indexOf('const esc='),app.indexOf('let me=null')),c);
+  vm.runInContext('globalThis.renderContent=content;globalThis.translateTemplate=tr',c);
+  return c;
+}
+
+test('L10N-01 live translation preserves names, messages, labels, filenames and titles',()=>{
+  const c=languageContext();
+  for(const value of ['Teacher','Home','Schedule','Members: Teacher','学生','<script>alert(1)</script>']){
+    const text=languageText(value),protectedEl=new LanguageElement('span',{'data-no-translate':'',title:value},[text]);
+    const root=new LanguageElement('section',{},[protectedEl]);
+    for(const lang of ['zh','en','zh']){c.siteLang=lang;c.applySiteLanguage(root);assert.equal(text.nodeValue,value);assert.equal(protectedEl.attrs.title,value);}
+  }
+  const message=languageText('Teacher');const bubble=new LanguageElement('div',{class:'chat-text'},[message]);
+  c.applySiteLanguage(bubble);assert.equal(message.nodeValue,'Teacher');
+  assert.equal(c.renderContent('<Teacher>'),'\x3cspan data-no-translate>&lt;Teacher&gt;</span>');
+});
+
+test('L10N-02 text, attributes and refreshed statuses survive English/Chinese round trips',()=>{
+  const c=languageContext(),text=languageText('Schedule');
+  const root=new LanguageElement('button',{title:'Teacher'},[text]);
+  c.applySiteLanguage(root);assert.equal(text.nodeValue,'课表');assert.equal(root.attrs.title,'老师');
+  c.siteLang='en';c.applySiteLanguage(root);assert.equal(text.nodeValue,'Schedule');assert.equal(root.attrs.title,'Teacher');
+  c.siteLang='zh';text.nodeValue='Loading messages…';c.applySiteLanguage(root);assert.equal(text.nodeValue,'正在加载消息…');
+  c.siteLang='en';c.applySiteLanguage(root);assert.equal(text.nodeValue,'Loading messages…');assert.equal(c.document.documentElement.lang,'en');
+});
+
+test('L10N-03 dialogs translate templates before substituting student content',()=>{
+  const c=languageContext();
+  assert.equal(c.translateTemplate('Reserve a seat in {0} on {1}?','Teacher','Home'),'预约 Home 的“Teacher”课程席位吗？');
+  assert.equal(c.translateTemplate('Delete “{0}” from the library? It will also be removed from any access codes that use it.','Schedule'),
+    '从资料库中删除“Schedule”吗？此文件也将从相关分享码中移除。');
+  for(const label of ['Incorrect username or password.','Passwords do not match.','End the class and disconnect everyone?',
+    'Repeat for how many weeks total? (2–24)','MathStudio annotations','Drawing over the teacher desktop share']){
+    assert.notEqual(c.translateTemplate(label),label);
+  }
+  c.siteLang='en';assert.equal(c.translateTemplate('Reserve a seat in {0} on {1}?','Teacher','Home'),'Reserve a seat in Teacher on Home?');
+});
+
+test('L10N-01 resource renderer marks data even when it matches interface labels',()=>{
+  const c=languageContext();Object.assign(c,{date:()=>'',formatBytes:()=>'',resourceFileIcon:()=>'',});
+  vm.runInContext(app.slice(app.indexOf('function fileLibraryHTML('),app.indexOf('function mountFileLibrary(')),c);
+  const html=c.fileLibraryHTML({files:[{id:1,name:'Teacher',mime:'text/plain',size:1,code_count:1}],
+    codes:[{id:1,label:'Schedule',code:'Home',active:true,files:[{name:'Teacher'}],created:0}],storage:{label:'Local'}});
+  for(const value of ['Teacher','Schedule','Home'])assert.ok(html.includes(`<span data-no-translate>${value}</span>`),value);
+  assert.ok(html.includes('data-no-translate title="Teacher"'));
+});
+
+
+test('MEDIA-02 floating annotator accepts an active native screen share',async()=>{
+  const source=fs.readFileSync(new URL('./classroom.js',import.meta.url),'utf8');
+  let focused=0;
+  const c={joined:true,presenter:null,nativeShare:{active:true},viewMode:'call',
+    annotatorWindow:{closed:false,focus(){focused++;}},toast(){}};
+  vm.createContext(c);
+  vm.runInContext(source.slice(source.indexOf('async function openFloatingAnnotator()'),source.indexOf('async function saveBoard(')),c);
+  await c.openFloatingAnnotator();assert.equal(focused,1);
+  c.nativeShare.active=false;await c.openFloatingAnnotator();assert.equal(focused,1);
+});
+
+
+test('L10N-03 browser translation placeholders preserve supplied values',()=>{
+  const c=languageContext();
+  const entries=vm.runInContext('Object.entries(SITE_ZH)',c);
+  for(const [source,translated] of entries){
+    assert.deepEqual([...(source.match(/\{\d+\}/g)||[])].sort(),[...(translated.match(/\{\d+\}/g)||[])].sort(),source);
+  }
+});

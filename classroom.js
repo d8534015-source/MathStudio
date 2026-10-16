@@ -1,6 +1,6 @@
 // Math Studio classroom v22: peer-to-peer WebRTC camera/microphone/screen sharing
 // plus an optional shared annotation/whiteboard layer.
-export async function mountClassroom({api,toast,me,settings,classes,esc}) {
+export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,localize=()=>{}}) {
   const $=s=>document.querySelector(s);
   const cid=Number(new URLSearchParams(location.search).get('id'));
   const cl=classes.find(c=>c.id===cid);
@@ -13,7 +13,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc}) {
   $('#footer').classList.add('hidden');
   $('#app').innerHTML=`
     <div class="roomhead">
-      <div><p class="eyebrow">Live classroom</p><h1>${esc(cl.title)}</h1></div>
+      <div><p class="eyebrow">Live classroom</p><h1><span data-no-translate>${esc(cl.title)}</span></h1></div>
       <a href="${instant?'/join':admin?'/admin':'/account'}">Back to ${instant?'join meeting':admin?'teaching calendar':'my lessons'}</a>
     </div>
     <section id="prejoin" class="panel prejoin-card">
@@ -68,7 +68,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc}) {
             <div class="meeting-section-title"><div><h2>Classroom</h2><p class="meta" id="galleryHint">Camera tiles appear here.</p></div></div>
             <div class="video-gallery" id="gallery">
               <article class="video-card local-video-card" id="localTile">
-                <div class="video-frame"><video id="local" autoplay playsinline muted></video><div class="camera-placeholder" id="localPlaceholder">${esc(me.name.slice(0,1).toUpperCase())}</div></div>
+                <div class="video-frame"><video id="local" autoplay playsinline muted></video><div class="camera-placeholder" id="localPlaceholder"><span data-no-translate>${esc(me.name.slice(0,1).toUpperCase())}</span></div></div>
                 <div class="video-label"><span>You</span><small id="localStatus">Mic off · Camera off</small></div>
               </article>
             </div>
@@ -230,7 +230,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc}) {
     if(!annotatorCtx||!annotatorWindow||annotatorWindow.closed)return;
     renderInto(annotatorCtx,!presenter&&!nativeShare.active&&viewMode==='whiteboard',annotatorDraft);
     const status=annotatorWindow.document.getElementById('annotatorStatus');
-    if(status)status.textContent=nativeShare.active?'Drawing over the teacher desktop share':presenter?'Drawing over the live shared screen':viewMode==='whiteboard'?'Shared whiteboard':'Start screen sharing or open the whiteboard first';
+    if(status)status.textContent=tr(nativeShare.active?'Drawing over the teacher desktop share':presenter?'Drawing over the live shared screen':viewMode==='whiteboard'?'Shared whiteboard':'Start screen sharing or open the whiteboard first');
   }
   function render(){
     renderInto(ctx,!presenter&&!nativeShare.active&&viewMode==='whiteboard',draft);
@@ -283,7 +283,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc}) {
   }
   async function openFloatingAnnotator(){
     if(!joined){toast('Join the classroom first.');return;}
-    if(!presenter&&viewMode!=='whiteboard'){toast('Start screen sharing or open the whiteboard first.');return;}
+    if(!presenter&&!nativeShare.active&&viewMode!=='whiteboard'){toast('Start screen sharing or open the whiteboard first.');return;}
     if(annotatorWindow&&!annotatorWindow.closed){try{annotatorWindow.focus();}catch{}return;}
     let w=null;
     try{
@@ -294,17 +294,18 @@ export async function mountClassroom({api,toast,me,settings,classes,esc}) {
         if(!w)throw new Error('The browser blocked the annotation window. Allow pop-ups for MathStudio and try again.');
       }
     }catch(ex){toast('Could not open the floating annotator: '+ex.message);return;}
-    annotatorWindow=w;const d=w.document;d.title='MathStudio annotations';
+    annotatorWindow=w;const d=w.document;d.title=tr('MathStudio annotations');
     d.head.innerHTML=`<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
       *{box-sizing:border-box}html,body{margin:0;background:#102a33;color:#fff;font:14px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}button,select,input{font:inherit}button{border:1px solid #55717a;border-radius:8px;background:#173b45;color:#fff;padding:7px 10px;cursor:pointer}button.active{background:#bce7d9;color:#102a33;border-color:#bce7d9}.bar{height:48px;display:flex;align-items:center;gap:6px;padding:6px 8px;background:#102a33;overflow-x:auto;white-space:nowrap}.bar input[type=color]{width:34px;height:34px;padding:1px;border:1px solid #6c858c;border-radius:7px;background:transparent}.bar select{height:34px;background:#173b45;color:#fff;border:1px solid #55717a;border-radius:7px}.stage{position:relative;width:100%;aspect-ratio:16/9;background:#07171c;overflow:hidden}.stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%}.stage video{object-fit:contain;background:#07171c}.stage canvas{touch-action:none}.hidden{display:none!important}.foot{height:32px;padding:7px 10px;background:#102a33;color:#c7dadd;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     </style>`;
     d.body.innerHTML=`<div class="bar"><button data-atool="pen" class="active">Pen</button><button data-atool="line">Line</button><button data-atool="circle">Circle</button><button data-atool="rect">Rectangle</button><button data-atool="erase">Eraser</button><input id="aColor" type="color" value="${annotatorColor}" title="Ink colour"><select id="aWidth"><option value="2">Thin</option><option value="4" selected>Medium</option><option value="7">Thick</option></select><button id="aUndo">Undo</button><button id="aClear">Clear</button><button id="aBack">MathStudio</button></div><div class="stage"><video id="annotatorVideo" autoplay playsinline muted></video><canvas id="annotatorCanvas" width="1600" height="900"></canvas></div><div class="foot" id="annotatorStatus">Floating annotations</div>`;
+    localize(d.body);
     annotatorCanvas=d.getElementById('annotatorCanvas');annotatorCtx=annotatorCanvas.getContext('2d');
     d.querySelectorAll('[data-atool]').forEach(b=>b.addEventListener('click',()=>{annotatorTool=b.dataset.atool;d.querySelectorAll('[data-atool]').forEach(x=>x.classList.toggle('active',x===b));}));
     d.getElementById('aColor').addEventListener('input',ev=>{annotatorColor=ev.target.value;});
     d.getElementById('aWidth').addEventListener('change',ev=>{annotatorWidth=Number(ev.target.value)||4;});
     d.getElementById('aUndo').addEventListener('click',async()=>{if(!canDraw())return;const id=[...myShapes].reverse().find(id=>board.shapes.some(s=>s.id===id));if(id&&await saveBoard({...board,shapes:board.shapes.filter(s=>s.id!==id)}))myShapes=myShapes.filter(x=>x!==id);});
-    d.getElementById('aClear').addEventListener('click',()=>{if(canDraw()&&confirm('Clear the shared annotations for everyone?'))saveBoard({...board,shapes:[]});});
+    d.getElementById('aClear').addEventListener('click',()=>{if(canDraw()&&confirm(tr('Clear the shared annotations for everyone?')))saveBoard({...board,shapes:[]});});
     d.getElementById('aBack').addEventListener('click',()=>{try{window.focus();}catch{}});
     const freshFloating=type=>({id:crypto.randomUUID(),type,color:annotatorColor,width:annotatorWidth});
     annotatorCanvas.addEventListener('pointerdown',async ev=>{
@@ -322,9 +323,9 @@ export async function mountClassroom({api,toast,me,settings,classes,esc}) {
   async function saveBoard(next){if(saving)return false;saving=true;$('#boardstatus').textContent='Saving…';try{const r=await post('board',{version,board:next});board=next;version=r.version;render();return true;}catch(ex){toast(ex.message);return false;}finally{saving=false;updateBoardStatus();}}
   function updateBoardStatus(){$('#boardstatus').textContent=!joined?'Disconnected':saving?'Saving…':drawingAllowed?'Draw with mouse, touch, or pen':'Viewing only · Teacher controls drawing';}
   function fresh(type){return {id:crypto.randomUUID(),type,color:$('#color').value,width:Number($('#width').value)};}
-  function canDraw(){if(!joined||saving||(!presenter&&viewMode!=='whiteboard'))return false;if(!drawingAllowed){toast('The teacher has not enabled student drawing.');return false;}return true;}
+  function canDraw(){if(!joined||saving||(!presenter&&!nativeShare.active&&viewMode!=='whiteboard'))return false;if(!drawingAllowed){toast('The teacher has not enabled student drawing.');return false;}return true;}
   async function addShape(s){if(await saveBoard({...board,shapes:[...board.shapes,s]}))myShapes.push(s.id);}
-  canvas.addEventListener('pointerdown',async ev=>{if(ev.button!==0&&ev.pointerType==='mouse')return;if(!canDraw())return;ev.preventDefault();const [x,y]=coordinates(ev);if(tool==='text'){const text=prompt('Text or math symbols:');if(text?.trim())await addShape({...fresh('text'),x,y,text:text.trim().slice(0,300)});return;}if(tool==='erase'){const found=[...board.shapes].reverse().find(s=>hit(s,x,y));if(found)await saveBoard({...board,shapes:board.shapes.filter(s=>s.id!==found.id)});return;}canvas.setPointerCapture(ev.pointerId);draft=tool==='pen'?{...fresh(tool),points:[[x,y]]}:{...fresh(tool),x,y,x2:x,y2:y};render();});
+  canvas.addEventListener('pointerdown',async ev=>{if(ev.button!==0&&ev.pointerType==='mouse')return;if(!canDraw())return;ev.preventDefault();const [x,y]=coordinates(ev);if(tool==='text'){const text=prompt(tr('Text or math symbols:'));if(text?.trim())await addShape({...fresh('text'),x,y,text:text.trim().slice(0,300)});return;}if(tool==='erase'){const found=[...board.shapes].reverse().find(s=>hit(s,x,y));if(found)await saveBoard({...board,shapes:board.shapes.filter(s=>s.id!==found.id)});return;}canvas.setPointerCapture(ev.pointerId);draft=tool==='pen'?{...fresh(tool),points:[[x,y]]}:{...fresh(tool),x,y,x2:x,y2:y};render();});
   canvas.addEventListener('pointermove',ev=>{if(!draft)return;ev.preventDefault();const [x,y]=coordinates(ev);if(draft.type==='pen'){if(draft.points.length<1500)draft.points.push([x,y]);}else{draft.x2=x;draft.y2=y;}render();});
   const finish=async()=>{if(!draft)return;const s=draft;draft=null;await addShape(s);render();};canvas.addEventListener('pointerup',finish);canvas.addEventListener('pointercancel',()=>{draft=null;render();});
   function distance(x,y,x1,y1,x2,y2){const a=(x-x1)*W,b=(y-y1)*H,c=(x2-x1)*W,d=(y2-y1)*H,t=Math.max(0,Math.min(1,(a*c+b*d)/(c*c+d*d||1)));return Math.hypot(a-t*c,b-t*d);}
@@ -333,7 +334,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc}) {
   $('#grid').onclick=()=>{if(canDraw())saveBoard({...board,background:board.background==='grid'?'blank':'grid'});};
   $('#plot').onclick=()=>{if(!canDraw())return;const coeffs={};for(const key of ['a','h','k']){coeffs[key]=Number($('#coef-'+key).value);if(!Number.isFinite(coeffs[key])||Math.abs(coeffs[key])>10){toast('Graph values must be between −10 and 10.');return;}}addShape({...fresh('graph'),fn:$('#function').value,...coeffs});};
   $('#undo').onclick=async()=>{if(!canDraw())return;const id=[...myShapes].reverse().find(id=>board.shapes.some(s=>s.id===id));if(id&&await saveBoard({...board,shapes:board.shapes.filter(s=>s.id!==id)}))myShapes=myShapes.filter(x=>x!==id);};
-  $('#clear').onclick=()=>{if(canDraw()&&confirm('Clear the shared annotations for everyone?'))saveBoard({...board,shapes:[]});};
+  $('#clear').onclick=()=>{if(canDraw()&&confirm(tr('Clear the shared annotations for everyone?')))saveBoard({...board,shapes:[]});};
   $('#save').onclick=()=>{const out=document.createElement('canvas');out.width=W;out.height=H;const x=out.getContext('2d');x.fillStyle='white';x.fillRect(0,0,W,H);const v=$('#presentation');if(presenter&&v.readyState>=2&&v.videoWidth){const scale=Math.min(W/v.videoWidth,H/v.videoHeight),vw=v.videoWidth*scale,vh=v.videoHeight*scale;x.fillStyle='#14272e';x.fillRect(0,0,W,H);x.drawImage(v,(W-vw)/2,(H-vh)/2,vw,vh);}x.drawImage(canvas,0,0);const a=document.createElement('a');a.href=out.toDataURL('image/png');a.download='math-class-'+cid+'.png';a.click();};
 
   async function makeOffer(id,p,iceRestart=false){
@@ -429,11 +430,11 @@ export async function mountClassroom({api,toast,me,settings,classes,esc}) {
   $('#allow')?.addEventListener('change',async()=>{try{await post('permissions',{drawing:$('#allow').checked});}catch(ex){toast(ex.message);}});
   $('#chatForm')?.addEventListener('submit',ev=>{ev.preventDefault();sendChat($('#chatInput').value);});
   $('#chatInput')?.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&!ev.shiftKey&&!ev.isComposing){ev.preventDefault();sendChat(ev.currentTarget.value);}});
-  $('#end')?.addEventListener('click',async()=>{if(!confirm('End the class and disconnect everyone?'))return;try{await api('/api/admin/class-action',{class_id:cid,action:'end'});await leave();location.href='/admin';}catch(ex){toast(ex.message);}});
+  $('#end')?.addEventListener('click',async()=>{if(!confirm(tr('End the class and disconnect everyone?')))return;try{await api('/api/admin/class-action',{class_id:cid,action:'end'});await leave();location.href='/admin';}catch(ex){toast(ex.message);}});
 
   function remoteTile(person){
     const div=document.createElement('article');div.className='video-card';div.id='peer-'+person.id;
-    div.innerHTML=`<div class="video-frame"><video autoplay playsinline muted></video><div class="camera-placeholder">${esc(initials(person.name))}</div></div><audio autoplay></audio><div class="video-label"><span>${esc(person.name)}</span><small>Connecting…</small></div>`;
+    div.innerHTML=`<div class="video-frame"><video autoplay playsinline muted></video><div class="camera-placeholder"><span data-no-translate>${esc(initials(person.name))}</span></div></div><audio autoplay></audio><div class="video-label"><span><span data-no-translate>${esc(person.name)}</span></span><small>Connecting…</small></div>`;
     $('#gallery').append(div);return div;
   }
   function updateTile(person,p){
@@ -451,7 +452,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc}) {
       const you=person.id===peer;
       const status=person.forced_mute?'Muted by teacher':person.mic_on?'Mic on':'Mic off';
       const hostControl=admin&&!you?`<button class="small secondary host-mute" data-peer="${esc(person.id)}" data-muted="${person.forced_mute?'1':'0'}">${person.forced_mute?'Allow mic':'Mute'}</button>`:'';
-      return `<div class="person-row"><div><strong>${esc(person.name)}${you?' (you)':''}</strong><span>${person.role==='admin'?'Teacher':'Student'} · ${status} · ${person.camera_on?'Camera on':'Camera off'}</span></div>${hostControl}</div>`;
+      return `<div class="person-row"><div><strong><span data-no-translate>${esc(person.name)}</span>${you?' (you)':''}</strong><span>${person.role==='admin'?'Teacher':'Student'} · ${status} · ${person.camera_on?'Camera on':'Camera off'}</span></div>${hostControl}</div>`;
     }).join('');
     document.querySelectorAll('.host-mute').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const muted=b.dataset.muted!=='1';await post('mute',{target:b.dataset.peer,muted});toast(muted?'Participant muted.':'Participant may unmute now.');await pollOnce();}catch(ex){toast(ex.message);}finally{b.disabled=false;}});
     for(const person of people)if(person.id!==peer)updateTile(person,peers.get(person.id));
