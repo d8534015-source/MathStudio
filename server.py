@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from http.cookies import SimpleCookie, CookieError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, parse_qs, quote, unquote, urlencode
+from studio_time import weekly_timestamp, timezone_rules, TimezoneDataError
 
 ROOT = Path(__file__).resolve().parent
 DATA = Path(os.environ.get('MATH_DATA', str(ROOT / 'bulletin_data')))
@@ -345,6 +346,15 @@ def number(data,key,low,high):
     value=data.get(key)
     need(isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) and low<=value<=high,'Invalid '+key)
     return value
+
+def scheduling_zone(c):
+    row=c.execute("SELECT value FROM settings WHERE key='timezone'").fetchone()
+    return row['value'] if row else DEFAULTS['timezone']
+
+def weekly_start(timestamp,weeks,zone):
+    try: return weekly_timestamp(timestamp,weeks,zone)
+    except TimezoneDataError as ex: raise APIError(str(ex),503)
+    except ValueError as ex: raise APIError(str(ex),400)
 
 def public_user(row):
     return {key:row[key] for key in ('id','username','name','role')} if row else None
@@ -954,6 +964,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_redirect(f"/classroom?id={item['class_id']}&teacherhost=1&autojoin=1")
                 return
             data={}
+            if post and self.path_only=='/api/teacher-app/media-login-token':
+                # The native helper has no browser cookie/CSRF token. Its scoped
+                # bearer token is revalidated using the Phase 2A lifecycle checks.
+                app_data=read_json_request(self)
+                media_token,cl=make_teacher_media_token(app_data.get('token',''))
+                self.send({'ok':True,'media_token':media_token,'class_id':cl['id'],'expires_in':90})
+                return
             if post and self.path_only=='/api/admin/files/upload':
                 self.send(self.handle_file_upload()); return
             if post and self.path_only=='/api/overlay/board':
@@ -1058,7 +1075,9 @@ class Handler(BaseHTTPRequestHandler):
             with db() as c:
                 settings={r['key']:r['value'] for r in c.execute('SELECT * FROM settings') if r['key'] in DEFAULTS}
                 posts=[dict(r) for r in c.execute('SELECT * FROM posts ORDER BY id DESC LIMIT 30')]
-            return {'settings':settings,'posts':posts}
+            try: rules=timezone_rules(settings['timezone'],datetime.now(timezone.utc).year)
+            except TimezoneDataError as ex: raise APIError(str(ex),503)
+            return {'settings':settings,'posts':posts,'timezone_rules':rules}
         if path=='/api/instant/info':
             self.limit_meeting_code()
             code=re.sub(r'\D','',self.query.get('code',[''])[0])
@@ -1268,7 +1287,7 @@ class Handler(BaseHTTPRequestHandler):
             need(active and frame,'No native screen frame is available.',404)
             self.send(frame,mime='image/jpeg'); return None
         if path.startswith('/api/'): raise APIError('Not found.',404)
-        files={'/':'index.html','/app.js':'app.js','/diagnostics.js':'diagnostics.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
+        files={'/':'index.html','/app.js':'app.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
         if path not in files and path in ('/booking','/login','/signup','/account','/classroom','/resources','/messages','/join'): path='/'
         need(path in files,'Page not found.',404)
         f=ROOT/files[path]; mime=mimetypes.guess_type(f.name)[0] or 'application/octet-stream'
@@ -1277,10 +1296,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def post_api(self,d):
         path=self.path_only
-        if path=='/api/teacher-app/media-login-token':
-            token=str(d.get('token',''))
-            media_token,cl=make_teacher_media_token(token)
-            return {'ok':True,'media_token':media_token,'class_id':cl['id'],'expires_in':90}
         if path=='/api/instant/join':
             self.limit_meeting_code()
             code=re.sub(r'\D','',str(d.get('code','')))
@@ -1514,9 +1529,10 @@ class Handler(BaseHTTPRequestHandler):
                 with db() as c:
                     c.execute('BEGIN IMMEDIATE')
                     lesson=c.execute('SELECT * FROM lesson_types WHERE id=? AND active=1',(lid,)).fetchone(); need(lesson,'Lesson option not found.',404)
+                    zone=scheduling_zone(c)
                     planned=[]
                     for i in range(weeks):
-                        st=start+i*7*86400; en=st+lesson['minutes']*60
+                        st=weekly_start(start,i,zone); en=st+lesson['minutes']*60
                         conflict=c.execute("SELECT 1 FROM classes WHERE status='scheduled' AND approval IN ('pending','confirmed') AND start<? AND start+minutes*60>?",(en,st)).fetchone()
                         need(not conflict,f'Week {i+1} conflicts with another lesson.',409)
                         planned.append(st)
@@ -1546,13 +1562,16 @@ class Handler(BaseHTTPRequestHandler):
                 group=secrets.token_hex(8) if weeks>1 else None
                 with db() as c:
                     c.execute('BEGIN IMMEDIATE')
+                    zone=scheduling_zone(c); planned=[]
                     for i in range(weeks):
-                        a=start+i*7*86400; b=end+i*7*86400
+                        a=weekly_start(start,i,zone); b=weekly_start(end,i,zone)
+                        need(15*60<=b-a<=12*3600,'Availability must be between 15 minutes and 12 hours.')
                         overlap=c.execute("SELECT 1 FROM availability WHERE status='open' AND start<? AND end>?",(b,a)).fetchone()
                         need(not overlap,'An open availability block already overlaps one of those times.',409)
+                        planned.append((a,b))
                     ids=[]
-                    for i in range(weeks):
-                        r=c.execute("INSERT INTO availability(start,end,status,repeat_group) VALUES (?,?,'open',?)",(start+i*7*86400,end+i*7*86400,group)); ids.append(r.lastrowid)
+                    for a,b in planned:
+                        r=c.execute("INSERT INTO availability(start,end,status,repeat_group) VALUES (?,?,'open',?)",(a,b,group)); ids.append(r.lastrowid)
                 return {'ok':True,'ids':ids}
             if path=='/api/admin/availability-action':
                 aid=int(number(d,'availability_id',1,1e9)); action=d.get('action'); need(action=='close','Invalid action.')
@@ -1573,8 +1592,9 @@ class Handler(BaseHTTPRequestHandler):
                     series=secrets.token_hex(8) if action=='confirm_weekly' else cl['series_id']
                     planned=[]
                     if action=='confirm_weekly':
+                        zone=scheduling_zone(c)
                         for i in range(1,weeks):
-                            st=cl['start']+i*7*86400; en=st+cl['minutes']*60
+                            st=weekly_start(cl['start'],i,zone); en=st+cl['minutes']*60
                             av=c.execute("SELECT * FROM availability WHERE status='open' AND start<=? AND end>=? ORDER BY start LIMIT 1",(st,en)).fetchone()
                             need(av,f'Week {i+1} does not have matching teacher availability. Add weekly availability first.',409)
                             conflict=c.execute("SELECT 1 FROM classes WHERE id<>? AND status='scheduled' AND approval IN ('pending','confirmed') AND start<? AND start+minutes*60>?",(cid,en,st)).fetchone()

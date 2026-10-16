@@ -14,7 +14,7 @@ import unittest
 from unittest import mock
 
 
-class SecurityStability(unittest.TestCase):
+class BackendCase(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.env = mock.patch.dict(os.environ, {'MATH_DATA': self.temp.name,
@@ -126,6 +126,7 @@ class SecurityStability(unittest.TestCase):
         self.assertEqual(self.request('/api/overlay/state?token='+overlay)[0], 403)
         self.assertEqual(self.request('/teacher-media-login?token='+media_token)[0], 403)
 
+class SecurityStability(BackendCase):
     def test_sec01_anonymous_only_sees_public_group_catalog(self):
         private = self.lesson(user='student')
         group = self.lesson(kind='group')
