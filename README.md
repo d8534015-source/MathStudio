@@ -1,6 +1,6 @@
 # MathStudio v41.6.6 — hardened release candidate
 
-Python backend on port 5051, Windows Teacher App, and bilingual student website. This branch includes the approved Phase 2A, Phase 2B Parts 1/2, and Phase 2C fixes. Current build/asset identity is in `version.json`.
+Python backend on port 5051, Windows Teacher App, and bilingual student website. This branch includes the approved Phase 2A, Phase 2B Parts 1/2, and Phase 2C fixes. Current build/asset identity is in `version.json`. Teacher Ready is a remote client; see `README - TEACHER READY.txt`. Only OWNER hosts the backend.
 
 For normal Windows use, follow **[INSTALL_WINDOWS.md](INSTALL_WINDOWS.md)**: install supported x64 Python with Tcl/Tk, double-click **SETUP MATHSTUDIO.bat**, then **OPEN MATHSTUDIO TEACHER.bat**. No VS Code is needed. The Teacher App creates the first teacher account on a fresh install and starts or reuses a matching website. Remote media requires an HTTPS student link and working TURN configuration.
 

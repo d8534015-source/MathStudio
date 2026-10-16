@@ -23,10 +23,11 @@ from studio_time import studio_zone, parse_local
 from build_info import BUILD_ID
 from runtime_paths import data_directory, state_directory
 from private_config import apply_config
+from teacher_connection import teacher_only, select_origin
 
 ROOT = Path(__file__).resolve().parent
 PORT = 5051
-LOCAL_ORIGIN = f"http://127.0.0.1:{PORT}"
+LOCAL_ORIGIN = os.environ.get("MATHSTUDIO_SERVER_URL", "" if teacher_only() else f"http://127.0.0.1:{PORT}").rstrip("/")
 DATA = data_directory(ROOT)
 APP_TITLE = "MathStudio Teacher"
 
@@ -258,6 +259,8 @@ def lan_ip():
 
 
 def can_connect():
+    if os.environ.get('MATHSTUDIO_REMOTE'):
+        return bool(server_build())
     try:
         with socket.create_connection(('127.0.0.1', PORT), timeout=.6):
             return True
@@ -405,8 +408,9 @@ class TeacherDesktopApp:
             try:self.root.state('zoomed')
             except tk.TclError:pass
         self.root.protocol('WM_DELETE_WINDOW', self.on_close)
+        self.remote = teacher_only() or bool(os.environ.get('MATHSTUDIO_REMOTE'))
         self.client = APIClient()
-        self.student_origin = f'http://{lan_ip()}:{PORT}'
+        self.student_origin = self.client.base if self.remote else f'http://{lan_ip()}:{PORT}'
         self.secure_origin = ''
         self.admin = {}
         self.schedule = {}
@@ -471,6 +475,13 @@ class TeacherDesktopApp:
     def _bootstrap(self):
         # Reuse a healthy matching server; create an account/start only when absent.
         self.root.deiconify()
+        if getattr(self,'remote',False):
+            try:
+                if self.client.json('/api/desktop-info')['build']!=BUILD_ID:
+                    raise RuntimeError(self.tr('OWNER and Teacher Ready builds do not match. Ask the owner to install the matching package.'))
+            except Exception as ex:
+                self.show_server_offline(str(ex));return
+            self.show_login();return
         if not can_connect():
             try:
                 if not ensure_admin_account(self.root):return
@@ -496,7 +507,7 @@ class TeacherDesktopApp:
         ttk.Label(card, text='Teacher desktop application', style='Card.TLabel', foreground='#66767d').pack(anchor='w', pady=(3, 18))
         ttk.Label(card, text='Student website is offline', style='Card.TLabel', font=('Segoe UI', 13, 'bold'), foreground='#b42318').pack(anchor='w')
         ttk.Label(card, text=detail, style='Card.TLabel', foreground='#66767d', wraplength=490).pack(anchor='w', pady=(5, 14))
-        ttk.Label(card, text='First double-click START STUDENT WEBSITE.bat, leave that window open, then click Retry below.', style='Card.TLabel', wraplength=490).pack(anchor='w', pady=(0, 16))
+        ttk.Label(card, text=('Check the OWNER HTTPS address and ask the owner to keep its backend running. Teacher Ready never starts a local backend.' if getattr(self,'remote',False) else 'First double-click START STUDENT WEBSITE.bat, leave that window open, then click Retry below.'), style='Card.TLabel', wraplength=490).pack(anchor='w', pady=(0, 16))
         row = ttk.Frame(card, style='Card.TFrame')
         row.pack(fill='x')
         ttk.Button(row, text='Retry connection', style='Accent.TButton', command=self.retry_server_connection).pack(side='left')
@@ -504,6 +515,8 @@ class TeacherDesktopApp:
         ttk.Label(card, text='Website: port 5051  •  Teacher app: separate process', style='Card.TLabel', foreground='#839097').pack(anchor='w', pady=(18, 0))
 
     def retry_server_connection(self):
+        if getattr(self,'remote',False):
+            self._bootstrap();return
         if not can_connect():
             return messagebox.showwarning(APP_TITLE,self.tr('The website server is still offline. Start START STUDENT WEBSITE.bat first.'), parent=self.root)
         build = server_build()
@@ -553,7 +566,7 @@ class TeacherDesktopApp:
                 status.config(text=str(ex))
         ttk.Button(card, text='Sign in to Teacher', style='Accent.TButton', command=login).pack(fill='x', ipady=3, pady=(2,0))
         ttk.Button(card, text='中文 / EN', style='Quiet.TButton', command=self.toggle_language).pack(fill='x', pady=(9,0))
-        tk.Label(card, text=f'Connected to student website server · port {PORT}', bg='white', fg='#8a989e', font=('Segoe UI', 8)).pack(anchor='w', pady=(18,0))
+        tk.Label(card, text=('Connected to OWNER HTTPS server' if self.remote else f'Connected to student website server · port {PORT}'), bg='white', fg='#8a989e', font=('Segoe UI', 8)).pack(anchor='w', pady=(18,0))
         self.apply_language(shell)
         user.focus_set()
         pw.bind('<Return>', login)
@@ -854,7 +867,7 @@ class TeacherDesktopApp:
         try:
             info = self.client.json('/api/desktop-info')
             self.secure_origin = (info.get('public_origin') or '').strip()
-            self.student_origin = f'http://{lan_ip()}:{PORT}'
+            self.student_origin = self.client.base if self.remote else f'http://{lan_ip()}:{PORT}'
             self.admin = self.client.json('/api/admin')
             self._active_signature=json.dumps({'classes':self.admin.get('calendar_classes',[]),'bookings':self.admin.get('bookings',[]),'users':self.admin.get('users',[]),'groups':self.admin.get('groups',[])},sort_keys=True,default=str,separators=(',',':'))
             self.schedule = self.client.json('/api/schedule')
@@ -968,7 +981,7 @@ class TeacherDesktopApp:
         try:
             info = self.client.json('/api/desktop-info')
             self.secure_origin = (info.get('public_origin') or '').strip()
-            self.student_origin = f'http://{lan_ip()}:{PORT}'
+            self.student_origin = self.client.base if self.remote else f'http://{lan_ip()}:{PORT}'
             if hasattr(self,'student_link_label') and self.student_link_label.winfo_exists():
                 self.student_link_label.config(text=self.secure_origin or self.student_origin)
             self.status_label.config(text='Website link refreshed')
@@ -1425,6 +1438,23 @@ class TeacherDesktopApp:
                 late=time.time()>float(cl['start']);status='LIVE' if cl.get('live') else ('Late — ready to start' if late else 'Ready')
                 self.meeting_tree.insert('', 'end',iid=str(cl['id']),values=(cl['title'],names,cl.get('share_code',''),self.fmt_time(cl['start']),status))
 
+    def _launch_teacher_meeting(self, cid):
+        remote=getattr(self,'remote',False)
+        payload={'class_id':cid}
+        if remote:payload['client_launch']=True
+        out=self.client.json('/api/admin/teacher-app-launch',payload)
+        if remote:
+            # Native overlay runs on the teacher PC, never the separately hosted OWNER.
+            command=[sys.executable,str(ROOT/'teacher_app_bootstrap.py'),'--server',self.client.base,
+                '--token',out['token'],'--public-origin',self.client.base,'--skip-auto-media']
+            try:
+                subprocess.Popen(command,cwd=str(ROOT),close_fds=True,
+                    creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+                out.update(launched=True,already_running=False,launch_error='')
+            except OSError:
+                out.update(launched=False,already_running=False,launch_error=self.tr('Could not start the local teacher meeting. Check setup and diagnostics.'))
+        return out
+
     def _open_full_classroom(self, url):
         """Open the same full classroom UI for instant and scheduled teacher meetings."""
         if not url:return
@@ -1450,7 +1480,7 @@ class TeacherDesktopApp:
         if title is None:return
         try:
             instant=self.client.json('/api/admin/instant-meeting',{'title':title.strip() or 'Instant math meeting'})
-            out=self.client.json('/api/admin/teacher-app-launch',{'class_id':instant['class_id']})
+            out=self._launch_teacher_meeting(instant['class_id'])
             self._open_full_classroom(out.get('browser_url',''))
             code=instant['code']
             self.root.clipboard_clear();self.root.clipboard_append(code)
@@ -1477,7 +1507,7 @@ class TeacherDesktopApp:
         cid=self._selected_class_id()
         if not cid:return messagebox.showinfo(APP_TITLE,self.tr('Select a confirmed class first.'),parent=self.root)
         try:
-            out=self.client.json('/api/admin/teacher-app-launch',{'class_id':cid})
+            out=self._launch_teacher_meeting(cid)
             self._open_full_classroom(out.get('browser_url',''))
             if not out.get('launched') and not out.get('already_running'):
                 messagebox.showwarning(APP_TITLE,self.tr('The classroom opened, but the native meeting window could not be launched automatically.\n') + out.get('launch_error', ''),parent=self.root)
@@ -1494,6 +1524,12 @@ class TeacherDesktopApp:
 
     # ----- Settings -----
     def page_settings(self):
+        if getattr(self,'remote',False):
+            connection=ttk.Frame(self.content,style='Card.TFrame',padding=12)
+            connection.pack(fill='x',pady=(0,12))
+            ttk.Label(connection,text='OWNER server connection',style='Card.TLabel').pack(side='left')
+            content_label(ttk.Label,connection,text=self.client.base,style='Card.TLabel').pack(side='left',padx=12)
+            ttk.Button(connection,text='Change OWNER server',command=self.change_owner_server).pack(side='right')
         settings=self.public.get('settings',{})
         wrap=ttk.Frame(self.content);wrap.pack(fill='both',expand=True);wrap.columnconfigure(0,weight=1);wrap.columnconfigure(1,weight=1)
         site=ttk.Frame(wrap,style='Card.TFrame',padding=16);site.grid(row=0,column=0,sticky='nsew',padx=(0,8))
@@ -1517,6 +1553,25 @@ class TeacherDesktopApp:
             try:self.client.json('/api/admin/post',{'title':title.get().strip(),'body':body.get('1.0','end').strip()});title.set('');body.delete('1.0','end');messagebox.showinfo(APP_TITLE,self.tr('Announcement published.'),parent=self.root)
             except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
         ttk.Button(post,text='Publish',command=publish).pack(anchor='e')
+
+    def change_owner_server(self):
+        if not messagebox.askyesno(APP_TITLE,self.tr('Change OWNER server? Finish active lessons first. This signs you out of the dashboard.'),parent=self.root):return
+        origin=select_origin(force=True)
+        if not origin or origin==self.client.base:return
+        try:self.client.json('/api/logout',{},timeout=3)
+        except Exception:pass
+        for name in ('message_poll_job','_active_poll_job'):
+            job=getattr(self,name,None)
+            if job:
+                try:self.root.after_cancel(job)
+                except Exception:pass
+                setattr(self,name,None)
+        os.environ['MATHSTUDIO_SERVER_URL']=origin
+        self.client=APIClient(origin)
+        self.student_origin=origin;self.secure_origin=''
+        self.current_page='';self.active_chat_id=None;self.active_group_id=None;self._active_signature=None
+        self.admin={};self.schedule={};self.file_info={};self.public={};self.classes=[]
+        self._bootstrap()
 
     def sign_out(self):
         try:self.client.json('/api/logout',{})

@@ -17,7 +17,7 @@ python release_package.py --kind owner
 python release_package.py --kind teacher
 ```
 
-After a release reviewer authorizes artifact assembly, create a **new** output path with `--output`; it refuses overwrites. Source candidate folders are `MathStudio_v41_6_6_OWNER_Release_Candidate` and `MathStudio_v41_6_6_TEACHER_READY_Release_Candidate`. They include no Python runtime; Teacher Ready still needs the documented setup. This phase validates assembly using synthetic fixtures; it does not claim complete Windows distribution artifacts.
+After a release reviewer authorizes artifact assembly, create a **new** output path with `--output`; it refuses overwrites. Source candidate folders are `MathStudio_v41_6_6_OWNER_Release_Candidate` and `MathStudio_v41_6_6_TEACHER_READY_Release_Candidate`. They include no Python runtime; Teacher Ready needs the documented setup and connects only to a separately hosted OWNER backend; package_role.json enforces that role. This phase validates assembly using synthetic fixtures; it does not claim complete Windows distribution artifacts.
 
 ## Dependencies and environment
 

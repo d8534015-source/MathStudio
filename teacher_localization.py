@@ -116,6 +116,16 @@ ZH = {
 
 # Annotation controls, dialogs and launcher UI; placeholders preserve user content.
 ZH.update({
+    'OWNER server connection': 'OWNER 服务器连接',
+    'Change OWNER server': '更改 OWNER 服务器',
+    'Change OWNER server? Finish active lessons first. This signs you out of the dashboard.': '更改 OWNER 服务器吗？请先结束当前课程，此操作将退出教师端登录。',
+
+    'Connected to OWNER HTTPS server': '已连接 OWNER HTTPS 服务器',
+
+    'OWNER and Teacher Ready builds do not match. Ask the owner to install the matching package.': 'OWNER 与教师端版本不匹配，请联系所有者安装对应版本。',
+    'Check the OWNER HTTPS address and ask the owner to keep its backend running. Teacher Ready never starts a local backend.': '请检查 OWNER HTTPS 地址，并确认所有者的服务器正在运行。教师端不会在本机启动服务器。',
+    'Could not start the local teacher meeting. Check setup and diagnostics.': '无法启动本机课堂，请检查安装及诊断信息。',
+
     'Port 5051 belongs to another MathStudio build. Stop it and start the v41.6.6 website.': '端口 5051 正由其他版本的 MathStudio 使用。请停止该进程并启动 v41.6.6 网站。',
     'Saving annotation…': '正在保存标注…',
     'Clear every shared annotation for everyone?': '确定为所有人清空共享标注吗？',

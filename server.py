@@ -1679,7 +1679,7 @@ class Handler(BaseHTTPRequestHandler):
                         TEACHER_APP_PROCESSES.pop(cid,None); proc=None
                 launched=False; already_running=proc is not None
                 launch_error=''
-                if not already_running and sys.platform=='win32':
+                if not already_running and not d.get('client_launch',False) and sys.platform=='win32':
                     try:
                         python=Path(sys.executable)
                         pythonw=python.with_name('pythonw.exe')
