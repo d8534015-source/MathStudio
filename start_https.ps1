@@ -78,6 +78,9 @@ try {
     $env:BIND_HOST = '0.0.0.0'
     $env:PORT = "$port"
     $env:PUBLIC_ORIGIN = $url
+    # This launcher owns a local cloudflared connector. Trust only its loopback
+    # peer address for CF-Connecting-IP; direct LAN clients remain untrusted.
+    $env:MATH_TRUSTED_PROXIES = '127.0.0.1/32,::1/128'
 
     Write-Host ''
     Write-Host '============================================================' -ForegroundColor Green

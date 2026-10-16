@@ -37,6 +37,7 @@ COOKIE = 'mathstudio_5051'
 SESSIONS = {}
 # Anonymous visitors should not occupy a session slot for eight hours.
 ANON_SESSION_IDLE_SECONDS = 15 * 60
+ANON_SESSION_LIMIT = 500
 SESSION_LIMIT = 3000
 SESSION_WARN_AT = 500
 ROOMS = {}
@@ -59,10 +60,10 @@ def _cloudflare_turn_ice_servers():
     api_token=os.environ.get('CLOUDFLARE_TURN_API_TOKEN','').strip()
     if not (key_id and api_token):
         return None, '', ''
-    now=time.time()
     with TURN_CACHE_LOCK:
+        now=time.time()
         cached=TURN_CACHE.get('iceServers')
-        if cached and now < float(TURN_CACHE.get('expires') or 0):
+        if now < float(TURN_CACHE.get('expires') or 0):
             return cached, TURN_CACHE.get('provider','Cloudflare Realtime TURN'), TURN_CACHE.get('error','')
         url=f'https://rtc.live.cloudflare.com/v1/turn/keys/{quote(key_id,safe="")}/credentials/generate-ice-servers'
         payload=json.dumps({'ttl':86400}).encode('utf-8')
@@ -348,6 +349,38 @@ def number(data,key,low,high):
 def public_user(row):
     return {key:row[key] for key in ('id','username','name','role')} if row else None
 
+def limit_requests(limits,message):
+    """Atomically consume fixed-window budgets; successful accounts cannot
+    erase another account's or a client's history."""
+    with db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        now=time.time()
+        c.execute('DELETE FROM attempts WHERE start<?',(now-300,))
+        updates=[]
+        for key,maximum,window in limits:
+            row=c.execute('SELECT count,start FROM attempts WHERE ip=?',(key,)).fetchone()
+            count,start=(row['count'],row['start']) if row and row['start']>now-window else (0,now)
+            need(count<maximum,message,429)
+            updates.append((key,count+1,start))
+        c.executemany('INSERT OR REPLACE INTO attempts VALUES (?,?,?)',updates)
+
+def session_capacity(anonymous=False):
+    """Caller holds LOCK. Reserve capacity for authenticated/guest users and
+    reclaim idle anonymous entries without evicting active authorizations."""
+    now=time.time()
+    anon=[(v.get('last_seen',0),key) for key,v in SESSIONS.items()
+          if not v.get('user') and not v.get('guest_identity')]
+    anon_count=len(anon)
+    if len(SESSIONS)>=SESSION_LIMIT or (anonymous and len(anon)>=ANON_SESSION_LIMIT):
+        for seen,key in sorted(anon):
+            if now-seen<=60: continue
+            SESSIONS.pop(key,None)
+            anon_count-=1
+            if len(SESSIONS)<SESSION_LIMIT and (not anonymous or anon_count<ANON_SESSION_LIMIT): break
+    remaining=sum(not v.get('user') and not v.get('guest_identity') for v in SESSIONS.values())
+    need(len(SESSIONS)<SESSION_LIMIT and (not anonymous or remaining<ANON_SESSION_LIMIT),
+         'Too many sessions. Try again later.',429)
+
 def clean_room(room):
     now=time.time()
     for key in list(room['peers']):
@@ -505,18 +538,56 @@ def clean_overlay_tokens():
         if OVERLAY_TOKENS[key]['expires']<now:
             del OVERLAY_TOKENS[key]
 
+def credential_version(user):
+    return hashlib.sha256(user['password'].encode()).hexdigest() if user['role']!='guest' else ''
+
+def token_claims(user,sid):
+    return {'uid':user['id'],'role':user['role'],'session':sid,
+            'credential_version':credential_version(user)}
+
+def revoke_tokens(session=None,uid=None):
+    # Caller holds LOCK. Revocation includes handoffs not yet consumed.
+    for tokens in (OVERLAY_TOKENS,TEACHER_APP_TOKENS,TEACHER_MEDIA_TOKENS):
+        for key,item in list(tokens.items()):
+            if (session is not None and item.get('session')==session) or (uid is not None and item.get('uid')==uid):
+                tokens.pop(key,None)
+
+def validate_token_user(item,c,cl,admin=False):
+    """Recheck the issuing authorization, rather than trusting a saved role."""
+    now=time.time()
+    session=SESSIONS.get(item.get('session'))
+    need(session and session['expires']>now,'Teacher or annotation authorization expired. Sign in again.',403)
+    if item.get('role')=='guest':
+        user=session.get('guest_identity')
+    else:
+        user=c.execute('SELECT * FROM users WHERE id=?',(session.get('user'),)).fetchone()
+    need(user and user['id']==item['uid'] and user['role']==item['role']
+         and hmac.compare_digest(credential_version(user),item.get('credential_version','')),
+         'Teacher or annotation authorization expired. Sign in again.',403)
+    if admin: need(user['role']=='admin','Admin access required.',403)
+    if user['role']!='admin':
+        access=session.get('instant_access',{}).get(str(cl['id']),{})
+        instant=cl['class_kind']=='instant' and access.get('expires',0)>now
+        booked=c.execute('SELECT 1 FROM bookings WHERE class_id=? AND user_id=?',(cl['id'],user['id'])).fetchone()
+        need(instant or booked,'Class access is no longer available.',403)
+    # Token activity keeps its issuing session alive, but never extends the
+    # token's own absolute lifetime.
+    session['last_seen']=now; session['expires']=now+28800
+    return user
+
 def overlay_token_access(token,require_live=True):
     need(isinstance(token,str) and 16<=len(token)<=160,'Invalid desktop annotation code.',403)
     with LOCK:
         clean_overlay_tokens(); item=OVERLAY_TOKENS.get(token)
         need(item,'Desktop annotation code expired. Generate a new one from the classroom.',403)
-        item['expires']=time.time()+4*3600
         cid=item['class_id']
-        room=room_for(cid); clean_room(room)
-        if require_live:
-            with db() as c:
-                cl=c.execute('SELECT * FROM classes WHERE id=?',(cid,)).fetchone()
+        with db() as c:
+            cl=c.execute('SELECT * FROM classes WHERE id=?',(cid,)).fetchone()
+            need(cl,'Class is unavailable.',404)
+            validate_token_user(item,c,cl)
+            if require_live:
                 need(cl and cl['status']=='scheduled' and cl['live'],'This classroom is no longer open.',409)
+        room=room_for(cid); clean_room(room)
         return item,room
 
 
@@ -538,7 +609,8 @@ def make_teacher_media_token(app_token):
         clean_teacher_media_tokens()
         token=secrets.token_urlsafe(32)
         TEACHER_MEDIA_TOKENS[token]={
-            'uid':item['uid'],'class_id':item['class_id'],'expires':time.time()+90
+            **{key:item[key] for key in ('uid','role','session','credential_version')},
+            'class_id':item['class_id'],'expires':time.time()+90
         }
     return token,cl
 
@@ -548,11 +620,11 @@ def consume_teacher_media_token(token):
         clean_teacher_media_tokens()
         item=TEACHER_MEDIA_TOKENS.pop(token,None)
     need(item,'Teacher media link expired. Reopen the meeting from the Teacher App.',403)
-    with db() as c:
-        user=c.execute('SELECT * FROM users WHERE id=?',(item['uid'],)).fetchone()
-        cl=c.execute('SELECT * FROM classes WHERE id=?',(item['class_id'],)).fetchone()
-    need(user and user['role']=='admin','Admin account unavailable.',403)
-    need(cl and cl['status']=='scheduled' and cl['live'],'This classroom is no longer open.',409)
+    with LOCK:
+        with db() as c:
+            cl=c.execute('SELECT * FROM classes WHERE id=?',(item['class_id'],)).fetchone()
+            need(cl and cl['status']=='scheduled' and cl['live'],'This classroom is no longer open.',409)
+            user=validate_token_user(item,c,cl,admin=True)
     return item,user,cl
 
 def teacher_app_access(token,require_live=True):
@@ -560,14 +632,14 @@ def teacher_app_access(token,require_live=True):
     with LOCK:
         clean_teacher_app_tokens(); item=TEACHER_APP_TOKENS.get(token)
         need(item,'Teacher app link expired. Open the meeting again from Admin.',403)
-        item['expires']=time.time()+12*3600
         cid=item['class_id']
-        room=room_for(cid); clean_room(room)
         with db() as c:
             cl=c.execute('SELECT * FROM classes WHERE id=?',(cid,)).fetchone()
-        need(cl and cl['status']!='cancelled','This class is unavailable.',404)
+            need(cl and cl['status']!='cancelled','This class is unavailable.',404)
+            validate_token_user(item,c,cl,admin=True)
         if require_live:
             need(cl['status']=='scheduled' and cl['live'],'This classroom is no longer open.',409)
+        room=room_for(cid); clean_room(room)
         return item,room,cl
 
 def read_json_request(handler,max_bytes=600000):
@@ -707,6 +779,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def prepare(self):
         self.sid=None
+        self.session={'user':None,'csrf':secrets.token_hex(32)}
+        self.path_only=urlsplit(self.path).path
+        self.query=parse_qs(urlsplit(self.path).query)
         # Accept localhost and, when intentionally listening on the LAN, private/local
         # IP-literal Host headers on this server port. Domain names are still rejected
         # unless PUBLIC_ORIGIN explicitly allowlists one, which keeps the basic
@@ -741,58 +816,74 @@ class Handler(BaseHTTPRequestHandler):
         now=time.time()
         with LOCK:
             for key in list(SESSIONS):
-                if SESSIONS[key]['expires']<now: del SESSIONS[key]
-            if sid not in SESSIONS:
-                # Remove the oldest idle anonymous sessions before exhausting the pool.
-                # Never evict authenticated users, or sessions containing guest identities
-                # (which may be involved in a live classroom).
-                if len(SESSIONS)>=SESSION_LIMIT:
-                    candidates=sorted((v.get('last_seen',0), k) for k,v in SESSIONS.items()
-                                      if not v.get('user') and not v.get('guest_identity')
-                                      and now-v.get('last_seen',0)>60)
-                    for _, key in candidates[:max(0,len(SESSIONS)-SESSION_LIMIT+100)]:
-                        SESSIONS.pop(key,None)
-                need(len(SESSIONS)<SESSION_LIMIT,'Too many sessions. Try again later.',503)
-                sid=secrets.token_hex(32)
-                SESSIONS[sid]={'user':None,'csrf':secrets.token_hex(32),'expires':now+ANON_SESSION_IDLE_SECONDS,'last_seen':now}
-            self.sid=sid; self.session=SESSIONS[sid]
-            self.session['last_seen']=now
-            self.session['expires']=now+(28800 if self.session.get('user') or self.session.get('guest_identity') else ANON_SESSION_IDLE_SECONDS)
+                if SESSIONS[key]['expires']<now:
+                    del SESSIONS[key]; revoke_tokens(session=key)
+            if sid in SESSIONS:
+                self.sid=sid; self.session=SESSIONS[sid]
+                self.session['last_seen']=now
+                self.session['expires']=now+(28800 if self.session.get('user') or self.session.get('guest_identity') else ANON_SESSION_IDLE_SECONDS)
+        # Only the explicit browser/native-dashboard bootstrap allocates an
+        # anonymous session. Existing cookies are still honored on every route.
+        if self.command=='GET' and self.path_only=='/api/me' and self.sid is None:
+            limit_requests([('session:'+self.client_ip(),30,60),('session-global',300,60)],
+                           'Too many sessions. Try again later.')
+            with LOCK:
+                session_capacity(anonymous=True)
+                self.sid=secrets.token_hex(32)
+                self.session={'user':None,'csrf':secrets.token_hex(32),
+                              'expires':now+ANON_SESSION_IDLE_SECONDS,'last_seen':now}
+                SESSIONS[self.sid]=self.session
         with db() as c:
             self.user=c.execute('SELECT * FROM users WHERE id=?',(self.session.get('user'),)).fetchone() if self.session.get('user') else None
         if self.user is None and isinstance(self.session.get('guest_identity'),dict):
             guest=self.session['guest_identity']
             self.user={'id':guest.get('id'),'username':'guest','name':guest.get('name','Guest'),'role':'guest'}
-        self.path_only=urlsplit(self.path).path
-        self.query=parse_qs(urlsplit(self.path).query)
 
     def require_user(self,admin=False):
         need(self.user is not None,'Please log in.',401)
         if admin: need(self.user['role']=='admin','Admin access required.',403)
 
-    def limit_auth(self):
-        with db() as c:
-            c.execute('BEGIN IMMEDIATE')
-            now=time.time(); ip=self.client_address[0]
-            c.execute('DELETE FROM attempts WHERE start<?',(now-300,))
-            row=c.execute('SELECT * FROM attempts WHERE ip=?',(ip,)).fetchone()
-            need(not row or row['count']<10,'Too many attempts. Wait five minutes.',429)
-            c.execute('INSERT OR REPLACE INTO attempts VALUES (?,?,?)',(ip,row['count']+1 if row else 1,row['start'] if row else now))
+    def client_ip(self):
+        peer=ipaddress.ip_address(self.client_address[0])
+        # Only a configured connector may supply Cloudflare's single-client IP.
+        # X-Forwarded-For is deliberately not accepted as an arbitrary chain.
+        for network in os.environ.get('MATH_TRUSTED_PROXIES','').split(','):
+            try: trusted=peer in ipaddress.ip_network(network.strip())
+            except ValueError: continue
+            if trusted:
+                try: return str(ipaddress.ip_address(self.headers.get('CF-Connecting-IP','')))
+                except ValueError: break
+        return str(peer)
+
+    def limit_auth(self,username,signup=False):
+        limits=[('auth-account:'+username,10,300),
+                ('auth-client:'+self.client_ip(),60,300),('auth-global',600,300)]
+        if signup: limits.append(('signup:'+self.client_ip(),10,300))
+        limit_requests(limits,'Too many attempts. Wait five minutes.')
 
     def limit_resource_code(self):
-        with db() as c:
-            c.execute('BEGIN IMMEDIATE')
-            now=time.time(); key='resource:'+self.client_address[0]
-            c.execute('DELETE FROM attempts WHERE start<?',(now-300,))
-            row=c.execute('SELECT * FROM attempts WHERE ip=?',(key,)).fetchone()
-            need(not row or row['count']<30,'Too many access-code attempts. Wait five minutes.',429)
-            c.execute('INSERT OR REPLACE INTO attempts VALUES (?,?,?)',(key,row['count']+1 if row else 1,row['start'] if row else now))
+        limit_requests([('resource:'+self.client_ip(),30,300),('resource-global',600,300)],
+                       'Too many access-code attempts. Wait five minutes.')
 
-    def rotate(self,user_id):
+    def limit_meeting_code(self):
+        limit_requests([('meeting:'+self.client_ip(),30,60),('meeting-global',300,60)],
+                       'Too many meeting-code attempts. Try again later.')
+
+    def rotate(self,user_id,transfer_tokens=False):
         with LOCK:
-            SESSIONS.pop(self.sid,None); self.sid=secrets.token_hex(32)
-            self.session={'user':user_id,'csrf':secrets.token_hex(32),'expires':time.time()+28800}
+            old_sid=self.sid
+            if old_sid not in SESSIONS: session_capacity()
+            SESSIONS.pop(old_sid,None); self.sid=secrets.token_hex(32)
+            now=time.time()
+            self.session={'user':user_id,'csrf':secrets.token_hex(32),'last_seen':now,
+                          'expires':now+(28800 if user_id else ANON_SESSION_IDLE_SECONDS)}
             SESSIONS[self.sid]=self.session
+            if transfer_tokens:
+                for tokens in (OVERLAY_TOKENS,TEACHER_APP_TOKENS,TEACHER_MEDIA_TOKENS):
+                    for item in tokens.values():
+                        if item.get('session')==old_sid: item['session']=self.sid
+            else:
+                revoke_tokens(session=old_sid)
 
     def room_access(self,class_id,live=True):
         self.require_user()
@@ -857,8 +948,9 @@ class Handler(BaseHTTPRequestHandler):
             self.prepare()
             if not post and self.path_only=='/teacher-media-login':
                 token=self.query.get('token',[''])[0]
-                item,user,cl=consume_teacher_media_token(token)
-                self.rotate(user['id'])
+                with LOCK:
+                    item,user,cl=consume_teacher_media_token(token)
+                    self.rotate(user['id'],transfer_tokens=self.sid==item['session'])
                 self.send_redirect(f"/classroom?id={item['class_id']}&teacherhost=1&autojoin=1")
                 return
             data={}
@@ -968,6 +1060,7 @@ class Handler(BaseHTTPRequestHandler):
                 posts=[dict(r) for r in c.execute('SELECT * FROM posts ORDER BY id DESC LIMIT 30')]
             return {'settings':settings,'posts':posts}
         if path=='/api/instant/info':
+            self.limit_meeting_code()
             code=re.sub(r'\D','',self.query.get('code',[''])[0])
             need(len(code)==10,'Enter a 10-digit meeting code.',400)
             with db() as c:
@@ -983,7 +1076,25 @@ class Handler(BaseHTTPRequestHandler):
                   EXISTS(SELECT 1 FROM bookings b WHERE b.class_id=classes.id AND b.user_id=?) AS mine,
                   COALESCE(classes.group_price_label,lesson_types.price_label,'') AS price_label
                   FROM classes LEFT JOIN lesson_types ON lesson_types.id=classes.lesson_type_id ORDER BY start''',(self.user['id'] if self.user else -1,)).fetchall()
-            return {'classes':[dict(r) for r in rows]}
+            if self.user and self.user['role']=='admin':
+                return {'classes':[dict(r) for r in rows]}
+            # Public catalog records must not disclose private lessons or internal
+            # ownership/series metadata. Admitted guests still need their class
+            # record to bootstrap the existing browser classroom.
+            visible=[]; now=time.time()
+            fields=('id','title','track','description','start','minutes','capacity',
+                    'status','live','approval','class_kind','booked','mine','price_label')
+            for row in rows:
+                public_group=(row['class_kind']=='group' and row['status']=='scheduled'
+                              and row['approval']=='confirmed' and row['start']>now)
+                access=self.session.get('instant_access',{}).get(str(row['id']),{})
+                admitted=(row['class_kind']=='instant' and row['status']=='scheduled'
+                          and access.get('expires',0)>now)
+                if not (row['mine'] or public_group or admitted): continue
+                item={key:row[key] for key in fields}
+                if row['mine']: item['group_chat_id']=row['group_chat_id']
+                visible.append(item)
+            return {'classes':visible}
         if path=='/api/schedule':
             now=time.time(); horizon=now+70*86400
             with db() as c:
@@ -1171,6 +1282,7 @@ class Handler(BaseHTTPRequestHandler):
             media_token,cl=make_teacher_media_token(token)
             return {'ok':True,'media_token':media_token,'class_id':cl['id'],'expires_in':90}
         if path=='/api/instant/join':
+            self.limit_meeting_code()
             code=re.sub(r'\D','',str(d.get('code','')))
             need(len(code)==10,'Enter a 10-digit meeting code.')
             with db() as c:
@@ -1190,9 +1302,9 @@ class Handler(BaseHTTPRequestHandler):
             access[str(item['class_id'])]={'code':code,'expires':item['expires']}
             return {'ok':True,'class_id':item['class_id'],'title':item['title'],'user':identity}
         if path in ('/api/signup','/api/login'):
-            self.limit_auth()
             username=field(d,'username',3,40).lower()
             need(re.fullmatch(r'[a-z0-9_]{3,40}',username),'Username: use letters, numbers, and underscores.')
+            self.limit_auth(username,signup=path=='/api/signup')
             password=d.get('password',''); need(isinstance(password,str) and 1<=len(password)<=256,'Invalid password.')
             if path=='/api/signup':
                 need(len(password)>=12,'Use at least 12 characters for your password.')
@@ -1207,7 +1319,7 @@ class Handler(BaseHTTPRequestHandler):
                 uid=u['id']
             self.rotate(uid)
             with db() as c:
-                c.execute('DELETE FROM attempts WHERE ip=?',(self.client_address[0],))
+                c.execute('DELETE FROM attempts WHERE ip=?',('auth-account:'+username,))
                 u=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
             return {'user':public_user(u),'csrf':self.session['csrf']}
         if path=='/api/logout':
@@ -1510,7 +1622,7 @@ class Handler(BaseHTTPRequestHandler):
                         c.execute('UPDATE classes SET live=1 WHERE id=?',(cid,))
                     clean_teacher_app_tokens()
                     token=secrets.token_urlsafe(36)
-                    TEACHER_APP_TOKENS[token]={'class_id':cid,'uid':self.user['id'],'expires':time.time()+12*3600}
+                    TEACHER_APP_TOKENS[token]={**token_claims(self.user,self.sid),'class_id':cid,'expires':time.time()+12*3600}
                     proc=TEACHER_APP_PROCESSES.get(cid)
                     if proc is not None and proc.poll() is not None:
                         TEACHER_APP_PROCESSES.pop(cid,None); proc=None
@@ -1564,6 +1676,7 @@ class Handler(BaseHTTPRequestHandler):
                     need(c.execute('SELECT 1 FROM users WHERE id=?',(uid,)).fetchone(),'User not found.',404)
                     c.execute('UPDATE users SET role=? WHERE id=?',(role,uid))
                 with LOCK:
+                    revoke_tokens(uid=uid)
                     for room in ROOMS.values():
                         for key in list(room['peers']):
                             if room['peers'][key]['uid']==uid: del room['peers'][key]
@@ -1590,7 +1703,15 @@ class Handler(BaseHTTPRequestHandler):
             return {'ok':True,'id':mid}
         if path.startswith('/api/room/'):
             cid=int(number(d,'class_id',1,1e9)); self.room_access(cid)
+            if path=='/api/room/join':
+                # Provider I/O is serialized only by TURN_CACHE_LOCK, never the
+                # global session/room lock needed by unrelated requests.
+                servers,relay_configured,relay_provider,relay_error=build_ice_servers(self.user['id'])
             with LOCK:
+                if path=='/api/room/join':
+                    # Lookup can outlast logout, role changes or class closure.
+                    self.prepare()
+                    self.room_access(cid)
                 room=room_for(cid); clean_room(room)
                 if path=='/api/room/join':
                     # Rejoining in the same browser replaces only that browser's old peer.
@@ -1603,7 +1724,6 @@ class Handler(BaseHTTPRequestHandler):
                     need(len(room['peers'])<6,'This small-group room is full (maximum 6 connected participants).',409)
                     peer=secrets.token_hex(16)
                     room['peers'][peer]={'uid':self.user['id'],'name':self.user['name'],'role':self.user['role'],'session':self.sid,'seen':time.time(),'mic_on':False,'camera_on':False,'forced_mute':False}
-                    servers,relay_configured,relay_provider,relay_error=build_ice_servers(self.user['id'])
                     return {'peer':peer,'iceServers':servers,'relayConfigured':relay_configured,
                             'relayProvider':relay_provider,'relayError':relay_error}
                 peer=d.get('peer'); self.owned_peer(room,peer)
@@ -1612,6 +1732,14 @@ class Handler(BaseHTTPRequestHandler):
                 if path=='/api/room/signal':
                     target=d.get('to'); need(target in room['peers'],'Participant left.',409)
                     signal=d.get('signal'); need(isinstance(signal,dict) and len(json.dumps(signal))<100000,'Invalid signal.')
+                    # Host moderation is generated only by /api/room/mute. Keep
+                    # participant signaling limited to the existing media protocol.
+                    if 'control' in signal:
+                        need(signal['control'] in ('renegotiate','camera-retry')
+                             and set(signal)<= {'control','iceRestart'},'Invalid signal.')
+                        need('iceRestart' not in signal or isinstance(signal['iceRestart'],bool),'Invalid signal.')
+                    else:
+                        need(set(signal) in ({'description'},{'candidate'}),'Invalid signal.')
                     need(len(room['events'])<12000,'Room is busy. Try again.',429)
                     room['seq']+=1; room['events'].append({'seq':room['seq'],'from':peer,'to':target,'signal':signal,'at':time.time()})
                     return {'ok':True}
@@ -1634,7 +1762,7 @@ class Handler(BaseHTTPRequestHandler):
                     token=secrets.token_urlsafe(24)
                     with LOCK:
                         clean_overlay_tokens()
-                        OVERLAY_TOKENS[token]={'class_id':cid,'uid':self.user['id'],'role':self.user['role'],'expires':time.time()+4*3600}
+                        OVERLAY_TOKENS[token]={**token_claims(self.user,self.sid),'class_id':cid,'expires':time.time()+4*3600}
                     return {'token':token,'class_id':cid,'expires_in':14400}
                 if path=='/api/room/mute':
                     self.require_user(True)
@@ -1675,9 +1803,13 @@ def main():
         if os.environ.get('MATH_DESKTOP_MODE')=='1':
             raise SystemExit('No teacher account exists. Start MathStudioTeacher.exe to create one.')
         print('Create the first teacher/admin account:'); cli_account()
-    with db() as c: c.execute('UPDATE classes SET live=0')
     try: server=ThreadingHTTPServer((BIND,PORT),Handler)
     except OSError as ex: raise SystemExit(f'Could not open port {PORT}: {ex}. Stop the program already using that port first.')
+    # A failed duplicate launch must not mutate the running server's classes.
+    try:
+        with db() as c: c.execute('UPDATE classes SET live=0')
+    except Exception:
+        server.server_close(); raise
     # Show both the same-computer address and a best-effort LAN address so
     # phones/tablets/other computers on the same network know what to open.
     lan_ip = None
