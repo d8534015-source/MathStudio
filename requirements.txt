@@ -1,0 +1,2 @@
+# IANA data for Windows and systems without an installed timezone database.
+tzdata>=2026.4

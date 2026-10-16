@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
 from teacher_localization import translate as translate_ui, read_language, save_language
+from studio_time import studio_zone, parse_local
 
 ROOT = Path(__file__).resolve().parent
 PORT = 5051
@@ -383,12 +384,8 @@ def quarter_values():
     return out
 
 
-def parse_local(date_text, time_text):
-    return datetime.fromisoformat(f'{date_text}T{time_text}:00').timestamp()
-
-
-def fmt_time(ts):
-    return datetime.fromtimestamp(float(ts)).strftime('%a, %b %d · %I:%M %p').replace(' 0', ' ')
+def fmt_time(ts, zone='America/Edmonton'):
+    return datetime.fromtimestamp(float(ts),studio_zone(zone)).strftime('%a, %b %d · %I:%M %p').replace(' 0', ' ')
 
 
 def fmt_day(ts):
@@ -718,10 +715,13 @@ class TeacherDesktopApp:
         'Instant':'即时课堂','Ready':'就绪','Late — ready to start':'已过开始时间，可立即开始','LIVE':'进行中','Share code':'课堂码','Students':'学生'
     }
 
+    def studio_zone_name(self):
+        return self.public.get('settings',{}).get('timezone','America/Edmonton')
+
     def fmt_time(self, ts):
         if self.lang == 'zh':
-            return datetime.fromtimestamp(float(ts)).strftime('%Y年%m月%d日 %H:%M')
-        return fmt_time(ts)
+            return datetime.fromtimestamp(float(ts),studio_zone(self.studio_zone_name())).strftime('%Y年%m月%d日 %H:%M')
+        return fmt_time(ts,self.studio_zone_name())
 
     def tr(self, value):
         translated = translate_ui(value, self.lang)
@@ -817,6 +817,8 @@ class TeacherDesktopApp:
             self.draw_calendar()
 
     def clear_content(self):
+        self.active_chat_id = None
+        self._chat_key = None
         for w in self.content.winfo_children():
             w.destroy()
         if self.message_poll_job:
@@ -976,7 +978,7 @@ class TeacherDesktopApp:
     def page_schedule(self):
         actions=ttk.Frame(self.content,style='Soft.TFrame',padding=12); actions.pack(fill='x',pady=(0,10))
         ttk.Label(actions,text='Teaching schedule',style='Soft.TLabel',font=('Segoe UI',11,'bold')).pack(side='left')
-        ttk.Label(actions,text='The calendar always uses the available window width.',style='Soft.TLabel',foreground='#667982').pack(side='left',padx=(10,0))
+        ttk.Label(actions,text=self.tr('Timezone')+': '+self.studio_zone_name(),style='Soft.TLabel',foreground='#667982').pack(side='left',padx=(10,0))
         ttk.Button(actions,text='Add availability',style='Quiet.TButton',command=self.open_availability_dialog).pack(side='right')
         ttk.Button(actions,text='Post group lesson',style='Quiet.TButton',command=self.open_group_class_dialog).pack(side='right',padx=(0,8))
         cal=ttk.Frame(self.content,style='Card.TFrame',padding=12); cal.pack(fill='both',expand=True)
@@ -1004,6 +1006,7 @@ class TeacherDesktopApp:
         w=min(760,max(520,int(self.root.winfo_width()*0.62)));h=420
         win.geometry(f'{w}x{h}')
         frame=self._availability_card(win);frame.pack(fill='both',expand=True,padx=16,pady=16)
+        ttk.Label(win,text=self.tr('Timezone')+': '+self.studio_zone_name()).pack(pady=(0,6))
         ttk.Button(win,text='Close',command=win.destroy).pack(pady=(0,14))
 
     def open_group_class_dialog(self):
@@ -1011,13 +1014,14 @@ class TeacherDesktopApp:
         w=min(820,max(560,int(self.root.winfo_width()*0.68)));h=600
         win.geometry(f'{w}x{h}')
         frame=self._group_class_card(win);frame.pack(fill='both',expand=True,padx=16,pady=16)
+        ttk.Label(win,text=self.tr('Timezone')+': '+self.studio_zone_name()).pack(pady=(0,6))
         ttk.Button(win,text='Close',command=win.destroy).pack(pady=(0,14))
 
     def _availability_card(self,parent):
         f=ttk.Frame(parent,style='Card.TFrame',padding=16)
         ttk.Label(f,text='Add private availability',style='Card.TLabel',font=('Segoe UI',12,'bold')).grid(row=0,column=0,columnspan=4,sticky='w')
         ttk.Label(f,text='Students can fit a 60/90-minute lesson inside this open block.',style='Card.TLabel',foreground='#66767d').grid(row=1,column=0,columnspan=4,sticky='w',pady=(2,10))
-        today=datetime.now()+timedelta(minutes=30); m=((today.minute+14)//15)*15
+        today=datetime.now(studio_zone(self.studio_zone_name()))+timedelta(minutes=30); m=((today.minute+14)//15)*15
         if m>=60: today=today.replace(minute=0)+timedelta(hours=1)
         else: today=today.replace(minute=m,second=0,microsecond=0)
         end=today+timedelta(hours=2)
@@ -1032,7 +1036,7 @@ class TeacherDesktopApp:
         ttk.Spinbox(f,from_=1,to=24,textvariable=weeks,width=8).grid(row=5,column=0,sticky='w',pady=(2,8))
         def add():
             try:
-                st=parse_local(date_var.get(),start_var.get()); en=parse_local(end_date.get(),end_var.get())
+                st=parse_local(date_var.get(),start_var.get(),self.studio_zone_name()); en=parse_local(end_date.get(),end_var.get(),self.studio_zone_name())
                 self.client.json('/api/admin/availability',{'start':st,'end':en,'repeat_weekly':weeks.get()>1,'weeks':weeks.get()})
                 self.refresh_all(); messagebox.showinfo(APP_TITLE,self.tr('Availability added.'),parent=self.root)
             except Exception as ex: messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
@@ -1044,7 +1048,7 @@ class TeacherDesktopApp:
         f=ttk.Frame(parent,style='Card.TFrame',padding=16)
         ttk.Label(f,text='Post a group lesson',style='Card.TLabel',font=('Segoe UI',12,'bold')).grid(row=0,column=0,columnspan=4,sticky='w')
         ttk.Label(f,text='Students reserve seats; everyone is added to the lesson group chat.',style='Card.TLabel',foreground='#66767d').grid(row=1,column=0,columnspan=4,sticky='w',pady=(2,10))
-        title=tk.StringVar(value=''); datev=tk.StringVar(value=(datetime.now()+timedelta(days=1)).strftime('%Y-%m-%d')); timev=tk.StringVar(value='16:00'); cap=tk.IntVar(value=4); price=tk.StringVar(value='Price TBD'); weeks=tk.IntVar(value=1)
+        title=tk.StringVar(value=''); datev=tk.StringVar(value=(datetime.now(studio_zone(self.studio_zone_name()))+timedelta(days=1)).strftime('%Y-%m-%d')); timev=tk.StringVar(value='16:00'); cap=tk.IntVar(value=4); price=tk.StringVar(value='Price TBD'); weeks=tk.IntVar(value=1)
         lessons=self.schedule.get('lesson_types',[])
         lesson_labels=[f"{x['name']} — {x['minutes']} min" for x in lessons]
         lessonvar=tk.StringVar(value=lesson_labels[0] if lesson_labels else '')
@@ -1061,7 +1065,7 @@ class TeacherDesktopApp:
         def post():
             try:
                 idx=lesson_labels.index(lessonvar.get()); lesson=lessons[idx]
-                payload={'title':title.get().strip(),'lesson_type_id':lesson['id'],'start':parse_local(datev.get(),timev.get()),'capacity':cap.get(),'price_label':price.get().strip() or 'Price TBD','description':desc.get().strip() or 'Small-group lesson','repeat_weekly':weeks.get()>1,'weeks':weeks.get()}
+                payload={'title':title.get().strip(),'lesson_type_id':lesson['id'],'start':parse_local(datev.get(),timev.get(),self.studio_zone_name()),'capacity':cap.get(),'price_label':price.get().strip() or 'Price TBD','description':desc.get().strip() or 'Small-group lesson','repeat_weekly':weeks.get()>1,'weeks':weeks.get()}
                 out=self.client.json('/api/admin/group-class',payload); self.refresh_all(); messagebox.showinfo(APP_TITLE,f"Posted {out.get('created',1)} group lesson(s).",parent=self.root)
             except Exception as ex: messagebox.showerror(APP_TITLE,str(ex),parent=self.root)
         ttk.Button(f,text='Post group lesson',command=post).grid(row=8,column=0,columnspan=4,sticky='e',pady=(10,0))
@@ -1071,7 +1075,8 @@ class TeacherDesktopApp:
     def shift_week(self,delta): self.week_offset+=delta; self.draw_calendar()
     def draw_calendar(self):
         c=self.calendar_canvas; c.delete('all')
-        now=datetime.now(); monday=(now-timedelta(days=now.weekday())).replace(hour=0,minute=0,second=0,microsecond=0)+timedelta(weeks=self.week_offset)
+        zone=studio_zone(self.studio_zone_name())
+        now=datetime.now(zone); monday=(now-timedelta(days=now.weekday())).replace(hour=0,minute=0,second=0,microsecond=0)+timedelta(weeks=self.week_offset)
         self.week_label.config(text=(f"{monday.strftime('%Y年%m月%d日')} – {(monday+timedelta(days=6)).strftime('%Y年%m月%d日')}" if self.lang=='zh' else f"{monday.strftime('%b %d')} – {(monday+timedelta(days=6)).strftime('%b %d, %Y')}"))
 
         def round_rect(x1,y1,x2,y2,r=10,**kwargs):
@@ -1106,7 +1111,7 @@ class TeacherDesktopApp:
         for a in self.schedule.get('availability',[]):
             st=float(a['start']); en=float(a['end'])
             if en<=week_start or st>=week_end: continue
-            ds=datetime.fromtimestamp(st); de=datetime.fromtimestamp(en); day=(ds.date()-monday.date()).days
+            ds=datetime.fromtimestamp(st,zone); de=datetime.fromtimestamp(en,zone); day=(ds.date()-monday.date()).days
             if not 0<=day<7: continue
             sm=ds.hour*60+ds.minute; em=de.hour*60+de.minute
             y1=head+((sm-start_hour*60)/15)*rowh; y2=head+((em-start_hour*60)/15)*rowh
@@ -1116,7 +1121,7 @@ class TeacherDesktopApp:
         for cl in self.admin.get('calendar_classes',[]):
             st=float(cl['start'])
             if not week_start<=st<week_end or cl.get('status')!='scheduled': continue
-            ds=datetime.fromtimestamp(st); day=(ds.date()-monday.date()).days
+            ds=datetime.fromtimestamp(st,zone); day=(ds.date()-monday.date()).days
             if not 0<=day<7: continue
             sm=ds.hour*60+ds.minute; y1=head+((sm-start_hour*60)/15)*rowh; y2=y1+(float(cl.get('minutes',60))/15)*rowh
             x1=left+day*colw+6; x2=x1+colw-12
@@ -1254,7 +1259,7 @@ class TeacherDesktopApp:
         for cl in sorted(self.admin.get('calendar_classes',[]),key=lambda x:x.get('start',0),reverse=True):
             if cl['id'] in seen: continue
             seen.add(cl['id']); count=len(cl.get('attendees',[]))
-            if count: self.groups_tree.insert(lesson_parent,'end',iid='c-'+str(cl['id']),text=f"{cl['title']} · {datetime.fromtimestamp(cl['start']).strftime('%b %d')}",values=(count,))
+            if count: self.groups_tree.insert(lesson_parent,'end',iid='c-'+str(cl['id']),text=f"{cl['title']} · {datetime.fromtimestamp(cl['start'],studio_zone(self.studio_zone_name())).strftime('%b %d')}",values=(count,))
         self.groups_tree.bind('<<TreeviewSelect>>',lambda e:self.load_group_chat())
         ttk.Button(left,text='Delete selected custom group',command=self.delete_group).pack(fill='x',pady=(8,0))
         ttk.Label(right,text='Persistent group chat',style='Card.TLabel',font=('Segoe UI',12,'bold')).pack(anchor='w')
@@ -1279,20 +1284,41 @@ class TeacherDesktopApp:
             if cl:self.group_members.config(text=self.tr('Lesson: ')+cl['title']+' · '+', '.join(a.get('name','') for a in cl.get('attendees',[])))
         self.refresh_group_messages()
     def refresh_group_messages(self):
+        if self.message_poll_job:
+            try: self.root.after_cancel(self.message_poll_job)
+            except Exception: pass
+            self.message_poll_job=None
         if not self.active_chat_id:return
+        key=(self.active_chat_type,self.active_chat_id)
+        changed=key!=getattr(self,'_chat_key',None)
+        since=0 if changed else self._chat_seq
+        if changed:
+            self.chat_text.config(state='normal');self.chat_text.delete('1.0','end')
+            self.chat_text.config(state='disabled')
+            self._chat_key=key;self._chat_seq=0
+        delay=4000
         try:
             if self.active_chat_type=='group':
-                out=self.client.json(f'/api/group-messages?group={self.active_chat_id}&since=0')
+                out=self.client.json(f'/api/group-messages?group={self.active_chat_id}&since={since}')
             else:
-                out=self.client.json(f'/api/messages?class={self.active_chat_id}&since=0')
-            self.chat_text.config(state='normal');self.chat_text.delete('1.0','end')
-            for m in out.get('messages',[]):
-                stamp=datetime.fromtimestamp(float(m['at'])).strftime('%b %d %I:%M %p')
-                codes='  [resource: '+', '.join(m.get('codes',[]))+']' if m.get('codes') else ''
-                self.chat_text.insert('end',f"{m['name']} · {stamp}{codes}\n{m['text']}\n\n")
-            self.chat_text.config(state='disabled');self.chat_text.see('end')
-        except Exception:pass
-        self.message_poll_job=self.root.after(4000,self.refresh_group_messages)
+                out=self.client.json(f'/api/messages?class={self.active_chat_id}&since={since}')
+            messages=out.get('messages',[]); next_seq=out.get('seq',since)
+            if messages and next_seq<=since: raise ValueError('Message cursor did not advance')
+            rendered=[]
+            for m in messages:
+                stamp=datetime.fromtimestamp(float(m['at']),studio_zone(self.studio_zone_name())).strftime('%b %d %I:%M %p')
+                codes='  [resource: '+', '.join(x['code'] for x in m['codes'])+']' if m.get('codes') else ''
+                rendered.append(f"{m['name']} · {stamp}{codes}\n{m['text']}\n\n")
+            self.chat_text.config(state='normal')
+            if rendered:
+                self.chat_text.insert('end',''.join(rendered));self.chat_text.see('end')
+            self._chat_key=key;self._chat_seq=next_seq
+            if len(messages)==300: delay=10
+        except Exception:
+            self.status_label.config(text=self.tr('● Connection problem'))
+        finally:
+            self.chat_text.config(state='disabled')
+        self.message_poll_job=self.root.after(delay,self.refresh_group_messages)
     def send_group_message(self):
         if not self.active_chat_id:return
         text=self.chat_entry.get().strip()
