@@ -25,12 +25,23 @@ import urllib.request
 import zipfile
 from datetime import datetime, timezone
 from http.cookies import SimpleCookie, CookieError
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as _ThreadingHTTPServer
 from urllib.parse import urlsplit, parse_qs, quote, unquote, urlencode
 from studio_time import weekly_timestamp, timezone_rules, TimezoneDataError
 
 from build_info import VERSION, BUILD_ID, ASSET_VERSION
 from runtime_paths import data_directory
+
+class ThreadingHTTPServer(_ThreadingHTTPServer):
+    # SO_REUSEADDR permits duplicate listeners on Windows. An exclusive socket
+    # ensures a duplicate OWNER cannot reset live classes or steal connections.
+    allow_reuse_address = os.name != 'nt'
+
+    def server_bind(self):
+        if os.name == 'nt':
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
 
 ROOT = Path(__file__).resolve().parent
 DATA = data_directory(ROOT)

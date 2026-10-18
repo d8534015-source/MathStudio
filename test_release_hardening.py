@@ -171,7 +171,7 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(data_directory(root),Path(folder)/'MathStudio'/'data')
             legacy=root/'bulletin_data';legacy.mkdir();(legacy/'posts.db').write_bytes(b'synthetic')
             self.assertEqual(data_directory(root),legacy)
-            with mock.patch.dict(os.environ,{'MATH_DATA':str(Path(folder)/'chosen')}):self.assertEqual(data_directory(root),Path(folder)/'chosen')
+            with mock.patch.dict(os.environ,{'MATH_DATA':str(Path(folder)/'chosen')}):self.assertEqual(data_directory(root),(Path(folder)/'chosen').resolve())
             self.assertEqual((legacy/'posts.db').read_bytes(),b'synthetic')
 
     def test_pkg01_setup_enforces_hashed_wheels_and_explicit_offline_source(self):
@@ -183,7 +183,7 @@ class RuntimeTests(unittest.TestCase):
                 command=run.call_args_list[0].args[0]
                 for option in ('--require-hashes','--only-binary=:all:','--no-index','--find-links'):self.assertIn(option,command)
                 self.assertNotIn('--extra-index-url',command)
-                self.assertEqual(command[command.index('--find-links')+1],str(root/'verified wheels'))
+                self.assertEqual(command[command.index('--find-links')+1],str((root/'verified wheels').resolve()))
                 builder.assert_called_once_with(with_pip=True,clear=False)
 
     def test_pkg01_setup_refuses_running_server_before_changing_runtime(self):

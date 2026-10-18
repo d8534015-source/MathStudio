@@ -282,7 +282,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "c83670bf181d3e32d000d29a8e1d66e193761a6b4711dd2e7860eb8bafe9182b"
+      "sha256": "28de3449210d967a8588e809003d1596154471dd17c54b1857dbe2cffaf99f98"
     },
     "setup_free_media.ps1": {
       "packages": [
@@ -395,7 +395,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "8389c5ef8b5d01ae2956c0b1d727690b58004f780065a648b11b32a21040b2a5"
+      "sha256": "9197aaf58cfbb7fb59552d52f683c61d0c71de681f2bd8e8671c17ccb32c3f93"
     },
     "test_security_stability.py": {
       "packages": [
