@@ -47,5 +47,6 @@ if __name__=='__main__':
         from teacher_app_bootstrap import message
         log=state_directory()/'teacher_startup_error.log';log.parent.mkdir(parents=True,exist_ok=True)
         log.write_text(traceback.format_exc(),encoding='utf-8')
-        message('MathStudio / 启动失败','MathStudio could not start. / MathStudio 无法启动。\n'+str(log))
+        if '--self-test' not in sys.argv:
+            message('MathStudio / 启动失败','MathStudio could not start. / MathStudio 无法启动。\n'+str(log))
         raise SystemExit(1)

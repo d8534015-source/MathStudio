@@ -340,7 +340,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "3ae6a00af829bd7a909b600212e390644adac3e301b52ee103fd9ed85036490c"
+      "sha256": "e6eb13195871c2f48b5bbfc39294267a5681d3ab299f0f85a8e4d13cdcb6766b"
     },
     "teacher_desktop_app.py": {
       "packages": [
@@ -432,7 +432,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "bfbedfe2d38a19225cca3de5cfbdbeb0635dd9ae36692ed3390971006e399942"
+      "sha256": "969db92e9f94697f3c5d39edfcf43225a7ad06b0a37dd8efdd3bd2d6ef058bf5"
     },
     "test_windows_startup.py": {
       "packages": [
@@ -480,7 +480,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "7477af2b0da878d68cbdb9c37a81c0684d501a17d3e0d9563703a6129de023b6"
+      "sha256": "4d47d49dd144e55ca997624b277ab9372896bfb6acedf480abacddbd499113b2"
     },
     "packaging/windows/check_owner_cleanup.py": {
       "packages": [

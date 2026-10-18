@@ -82,13 +82,16 @@ def check_connection(origin):
 
 
 def select_origin(force=False):
+    invalid_saved=False
     try:current=configured_origin()
-    except (ValueError,KeyError,TypeError,OSError):current=''
+    except (ValueError,KeyError,TypeError,OSError):current='';invalid_saved=True
     if current and not force:return current
     import tkinter as tk
     from tkinter import simpledialog,messagebox
     root=tk.Tk();root.withdraw()
     try:
+        if invalid_saved:
+            messagebox.showerror('MathStudio', 'Saved OWNER settings are invalid or unreadable. Enter the current OWNER HTTPS address. / 已保存的 OWNER 设置无效或无法读取，请输入当前 OWNER HTTPS 地址。',parent=root)
         while True:
             value=simpledialog.askstring('MathStudio OWNER / 服务器',
                 'Enter the OWNER HTTPS address / 输入 OWNER HTTPS 地址：',initialvalue=current,parent=root)
