@@ -1,0 +1,1 @@
+import {siteLang,setLanguage,installLanguageObserver} from '/web_i18n.js';const button=document.querySelector('#language');const label=()=>button.textContent=siteLang==='zh'?'EN':'中文';button.onclick=()=>{setLanguage(siteLang==='zh'?'en':'zh');label();};installLanguageObserver();label();

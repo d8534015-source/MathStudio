@@ -93,7 +93,7 @@ test('UI-02 background refresh retains redeemed downloads and translation state'
 
 test('MEDIA-02 native sharing allows authorized drawing without changing media negotiation',()=>{
   const source=fs.readFileSync(new URL('./classroom.js',import.meta.url),'utf8');
-  const c={joined:true,saving:false,presenter:null,viewMode:'call',nativeShare:{active:true},drawingAllowed:true,toast(){}};
+  const c={joined:true,saving:false,presenter:null,viewMode:'call',nativeShare:{active:true},drawingAllowed:true,toast(){},tr:s=>s};
   vm.createContext(c);
   vm.runInContext(source.slice(source.indexOf('function canDraw()'),source.indexOf('\n',source.indexOf('function canDraw()'))),c);
   assert.equal(c.canDraw(),true);
@@ -119,19 +119,23 @@ class LanguageElement {
     }
     return null;
   }
+  get dataset(){const el=this;return new Proxy({}, {get(_,key){return el.attrs['data-'+key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase())];},set(_,key,value){el.attrs['data-'+key.replace(/[A-Z]/g,c=>'-'+c.toLowerCase())]=value;return true;}});}
+  get textContent(){return this.children.map(x=>x.nodeType===3?x.nodeValue:x.textContent).join('');}
+  set textContent(value){this.children=[languageText(value)];}
+  matches(selector){return selector.split(',').some(x=>x.startsWith('[')&&this.getAttribute(x.slice(1,-1))!==null);}
   querySelectorAll(){return this.children.flatMap(x=>x.nodeType===1?[x,...x.querySelectorAll()]:[]);}
 }
 const languageText=value=>({nodeType:3,nodeValue:value});
 function languageContext(){
-  const document={documentElement:{lang:'en'},createTreeWalker(root){
-    const nodes=[];const visit=n=>{for(const child of n.children||[])child.nodeType===3?nodes.push(child):visit(child);};
-    visit(root);let i=0;return {nextNode:()=>nodes[i++]||null};
-  }};
-  const c={siteLang:'zh',document,Node:{TEXT_NODE:3},NodeFilter:{SHOW_TEXT:4}};
+  const document={documentElement:{lang:'en'},querySelectorAll:()=>[]};
+  const preference={value:'zh'};
+  const c={document,preference,localStorage:{getItem:()=>preference.value,setItem(key,value){preference.value=value;}},window:{dispatchEvent(){}},CustomEvent:class{}};
   vm.createContext(c);
-  vm.runInContext(app.slice(app.indexOf('const SITE_ZH='),app.indexOf('function installLanguageObserver()')),c);
+  const catalog=fs.readFileSync(new URL('./locales.js',import.meta.url),'utf8').replaceAll('export const ','const ');
+  const engine=fs.readFileSync(new URL('./web_i18n.js',import.meta.url),'utf8').replace(/^import .*$/m,'').replaceAll('export ','');
+  vm.runInContext(catalog+'\n'+engine,c);
   vm.runInContext(app.slice(app.indexOf('const esc='),app.indexOf('let me=null')),c);
-  vm.runInContext('globalThis.renderContent=content;globalThis.translateTemplate=tr',c);
+  vm.runInContext('globalThis.renderContent=content;globalThis.translateTemplate=tr;globalThis.catalogEntries=Object.entries(EN).map(([key,value])=>[value,ZH[key]]);',c);
   return c;
 }
 
@@ -140,7 +144,7 @@ test('L10N-01 live translation preserves names, messages, labels, filenames and 
   for(const value of ['Teacher','Home','Schedule','Members: Teacher','学生','<script>alert(1)</script>']){
     const text=languageText(value),protectedEl=new LanguageElement('span',{'data-no-translate':'',title:value},[text]);
     const root=new LanguageElement('section',{},[protectedEl]);
-    for(const lang of ['zh','en','zh']){c.siteLang=lang;c.applySiteLanguage(root);assert.equal(text.nodeValue,value);assert.equal(protectedEl.attrs.title,value);}
+    for(const lang of ['zh','en','zh']){c.setLanguage(lang);c.applySiteLanguage(root);assert.equal(text.nodeValue,value);assert.equal(protectedEl.attrs.title,value);}
   }
   const message=languageText('Teacher');const bubble=new LanguageElement('div',{class:'chat-text'},[message]);
   c.applySiteLanguage(bubble);assert.equal(message.nodeValue,'Teacher');
@@ -149,11 +153,11 @@ test('L10N-01 live translation preserves names, messages, labels, filenames and 
 
 test('L10N-02 text, attributes and refreshed statuses survive English/Chinese round trips',()=>{
   const c=languageContext(),text=languageText('Schedule');
-  const root=new LanguageElement('button',{title:'Teacher'},[text]);
-  c.applySiteLanguage(root);assert.equal(text.nodeValue,'课表');assert.equal(root.attrs.title,'老师');
-  c.siteLang='en';c.applySiteLanguage(root);assert.equal(text.nodeValue,'Schedule');assert.equal(root.attrs.title,'Teacher');
-  c.siteLang='zh';text.nodeValue='Loading messages…';c.applySiteLanguage(root);assert.equal(text.nodeValue,'正在加载消息…');
-  c.siteLang='en';c.applySiteLanguage(root);assert.equal(text.nodeValue,'Loading messages…');assert.equal(c.document.documentElement.lang,'en');
+  const root=new LanguageElement('button',{title:'Teacher','data-i18n':'ui.schedule','data-i18n-title':'ui.teacher'},[text]);
+  c.applySiteLanguage(root);assert.equal(root.textContent,'课表');assert.equal(root.attrs.title,'老师');
+  c.setLanguage('en');c.applySiteLanguage(root);assert.equal(root.textContent,'Schedule');assert.equal(root.attrs.title,'Teacher');
+  c.setLanguage('zh');c.uiText(root,c.tr('ui.loading_messages'));c.applySiteLanguage(root);assert.equal(root.textContent,'正在加载消息…');
+  c.setLanguage('en');c.applySiteLanguage(root);assert.equal(root.textContent,'Loading messages…');assert.equal(c.document.documentElement.lang,'en');
 });
 
 test('L10N-03 dialogs translate templates before substituting student content',()=>{
@@ -165,7 +169,7 @@ test('L10N-03 dialogs translate templates before substituting student content',(
     'Repeat for how many weeks total? (2–24)','MathStudio annotations','Drawing over the teacher desktop share']){
     assert.notEqual(c.translateTemplate(label),label);
   }
-  c.siteLang='en';assert.equal(c.translateTemplate('Reserve a seat in {0} on {1}?','Teacher','Home'),'Reserve a seat in Teacher on Home?');
+  c.setLanguage('en');assert.equal(c.translateTemplate('Reserve a seat in {0} on {1}?','Teacher','Home'),'Reserve a seat in Teacher on Home?');
 });
 
 test('L10N-01 resource renderer marks data even when it matches interface labels',()=>{
@@ -182,7 +186,7 @@ test('MEDIA-02 floating annotator accepts an active native screen share',async()
   const source=fs.readFileSync(new URL('./classroom.js',import.meta.url),'utf8');
   let focused=0;
   const c={joined:true,presenter:null,nativeShare:{active:true},viewMode:'call',
-    annotatorWindow:{closed:false,focus(){focused++;}},toast(){}};
+    annotatorWindow:{closed:false,focus(){focused++;}},toast(){},tr:s=>s};
   vm.createContext(c);
   vm.runInContext(source.slice(source.indexOf('async function openFloatingAnnotator()'),source.indexOf('async function saveBoard(')),c);
   await c.openFloatingAnnotator();assert.equal(focused,1);
@@ -192,8 +196,42 @@ test('MEDIA-02 floating annotator accepts an active native screen share',async()
 
 test('L10N-03 browser translation placeholders preserve supplied values',()=>{
   const c=languageContext();
-  const entries=vm.runInContext('Object.entries(SITE_ZH)',c);
+  const entries=c.catalogEntries;
   for(const [source,translated] of entries){
     assert.deepEqual([...(source.match(/\{\d+\}/g)||[])].sort(),[...(translated.match(/\{\d+\}/g)||[])].sort(),source);
   }
+});
+
+test('Website catalogs are complete, canonical and scoped to marked interface nodes',()=>{
+  const c=languageContext();
+  assert.equal(vm.runInContext('JSON.stringify(Object.keys(EN).sort())===JSON.stringify(Object.keys(ZH).sort())',c),true);
+  assert.equal(vm.runInContext('Object.values(ZH).every(value=>typeof value==="string"&&value.length>0)',c),true);
+  const defined=new Set(vm.runInContext('Object.keys(EN)',c));
+  for(const filename of ['app.js','classroom.js','translation_manager.js','public_content.js','teacher.html','index.html']){
+    const text=fs.readFileSync(new URL('./'+filename,import.meta.url),'utf8');
+    for(const match of text.matchAll(/(?:tr|htmlText)\(['"]((?:ui|translation|teacher|media)\.[a-z0-9_.]+)['"]/g))assert.ok(defined.has(match[1]),filename+': '+match[1]);
+    for(const match of text.matchAll(/data-i18n(?:-[a-z-]+)?=["']((?:ui|translation|teacher|media)\.[a-z0-9_.]+)/g))assert.ok(defined.has(match[1]),filename+': '+match[1]);
+  }
+  assert.ok(!app.includes('createTreeWalker'));
+  const unmarked=new LanguageElement('button',{},[languageText('Home')]);
+  c.applySiteLanguage(unmarked);assert.equal(unmarked.textContent,'Home');
+});
+
+test('Previously mixed booking labels round-trip without translating supplied course names',()=>{
+  const c=languageContext();
+  const labels=['Log in to book','Small-group lessons','Join a scheduled group','No group lessons posted yet',
+    'New group sessions will appear here when the teacher opens them.','Available starts update automatically for the selected duration.'];
+  for(const label of labels){assert.notEqual(c.tr(label),label);c.setLanguage('en');assert.equal(c.tr(label),label);c.setLanguage('zh');}
+  assert.equal(c.tr('ui.request_booking','Home',60,'2026-10-18','09:00'),'申请 2026-10-18 09:00 的“Home”（60 分钟）课程吗？');
+  const html=c.htmlText('ui.request_booking','<script>alert(1)</script>',60,'Today','09:00');
+  assert.ok(html.includes('&lt;script&gt;'));assert.ok(!html.includes('<script>'));
+});
+
+test('Language changes persist and refresh current labels without page navigation',()=>{
+  const c=languageContext();c.setLanguage('en');assert.equal(c.preference.value,'en');
+  c.setLanguage('zh');assert.equal(c.preference.value,'zh');
+  const label=new LanguageElement('button',{'data-i18n':'ui.loading_messages'},[]);
+  c.uiText(label,c.tr('ui.request_failed'));c.setLanguage('en');c.applySiteLanguage(label);
+  assert.equal(label.textContent,'Request failed');
+  assert.ok(!app.includes("localStorage.setItem('mathstudio_lang',siteLang==='zh'?'en':'zh');location.reload()"));
 });

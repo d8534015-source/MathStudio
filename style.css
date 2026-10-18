@@ -157,3 +157,9 @@ html{min-width:0}body{min-width:0;overflow-x:hidden}.navlinks{min-width:0}.navli
 .teacher-host-room .video-gallery{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .teacher-host-room .room-aside{background:#fff;border:1px solid #dfe7ea;border-radius:18px;padding:16px;box-shadow:0 8px 24px rgba(18,45,53,.05)}
 @media(max-width:1000px){.teacher-host-room .meeting-layout{grid-template-columns:1fr}.teacher-host-room .room-aside{order:2}}
+
+/* Public translation controls keep original text separate from interface labels. */
+.translation-fallback{display:inline-block;font-size:12px;line-height:1.4;letter-spacing:normal;vertical-align:middle;font-weight:400;color:var(--muted)}
+#translationOriginal{white-space:pre-wrap;overflow-wrap:anywhere}#translationConfig{margin-bottom:24px}#translationDraft{width:100%;min-height:170px}#protectedTerms{width:100%}.course-description:empty{display:none}.course-description:not(:empty){margin-bottom:16px}
+
+.person-row span[data-i18n]{display:inline}

@@ -1,6 +1,8 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MathStudio Teacher / 教师端</title><link rel="stylesheet" href="/style.css"></head>
-<body><main class="panel"><h1>MathStudio Teacher / MathStudio 教师端</h1>
-<p>Manage classes in the Windows Teacher App. Double-click <strong>OPEN MATHSTUDIO TEACHER.bat</strong> in your verified installation folder. First-time users should run <strong>SETUP MATHSTUDIO.bat</strong> and follow INSTALL_WINDOWS.md. No VS Code is required.</p>
-<p lang="zh-CN">请使用 Windows 教师端管理课程。在已验证的安装文件夹中双击 <strong>OPEN MATHSTUDIO TEACHER.bat</strong>。首次使用时，请先运行 <strong>SETUP MATHSTUDIO.bat</strong>，并参阅 INSTALL_WINDOWS.md。无需安装 VS Code。</p>
-<p><a href="/">Student website / 学生网站</a> · <a href="/account">My lessons / 我的课程</a> · <a href="/join">Join meeting / 加入课堂</a></p></main></body></html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MathStudio Teacher</title><link rel="stylesheet" href="/style.css"></head>
+<body><main class="panel"><button id="language" class="secondary" data-no-translate>中文</button><h1 data-i18n="teacher.title">MathStudio Teacher</h1>
+<p data-i18n="teacher.installer">Use the verified MathStudio.exe Windows installer. Open MathStudio from the Start menu or desktop shortcut. No VS Code is needed. The Teacher App connects to a separately hosted OWNER server.</p>
+<p data-i18n="teacher.first_launch">On first launch, enter your OWNER server’s HTTPS URL and sign in with your teacher account. Change the server address later in Settings.</p>
+<p><a href="/teacher/translations" data-i18n="translation.manager">Public website translations</a></p>
+<p><a href="/" data-i18n="ui.home">Home</a> · <a href="/account" data-i18n="ui.my_lessons">My lessons</a> · <a href="/join" data-i18n="ui.join_meeting">Join meeting</a></p></main>
+<script type="module" src="/teacher_page.js"></script></body></html>

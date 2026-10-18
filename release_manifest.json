@@ -5,10 +5,10 @@
     "build_id": "v41.6.6-delivery-candidate1",
     "asset_version": "41_6_6_delivery1"
   },
-  "parent_commit": "b8fc294f5b55ab0f389ef2e74408088b74e64dde",
-  "status": "Delivery source candidates; Teacher Ready connects to separate OWNER. Windows/device/signing acceptance pending.",
+  "parent_commit": "58590f9903dc7fca01b759e6f764c703a7f4d40f",
+  "status": "Website integration review candidate; existing teacher installer unchanged. External public translation disabled by default. Physical Windows/mobile/provider acceptance pending.",
   "folders": {
-    "owner": "MathStudio_v41_6_6_OWNER_Delivery_Candidate",
+    "owner": "MathStudio_v41_6_6_OWNER_Website_Integration_Candidate",
     "teacher": "MathStudio_v41_6_6_TEACHER_READY_Delivery_Candidate"
   },
   "runtime": {
@@ -99,7 +99,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "60cc142782f6590b4f42a4bf712847575e0253e9af456b498b4f0e55d63dbb5e"
+      "sha256": "b5267a535617bddad7063a45c0243a74d51d600c8a4d9514a1d77894e1576ef2"
     },
     "README - TEACHER READY.txt": {
       "packages": [
@@ -174,7 +174,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "e49eeeaa57092abecfe4163a7400013b63bd5a0df2531c6890cc87193c33c11f"
+      "sha256": "7a119f4401bd1d757e65a143924e938182077ad52eaa3cf1a47f3d8c9196d986"
     },
     "build_info.py": {
       "packages": [
@@ -187,7 +187,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "578324935305e89cc16951e0504d7cd741839a0f06406813685bfbb2a34b8244"
+      "sha256": "294e35bff168dde38fc6e89f80d0452bb1e071fa8251b8a23995e9a718416cfd"
     },
     "cloud_storage.example.bat": {
       "packages": [
@@ -206,7 +206,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "f722f60a69d166d23f5766df5ed593011a81964faa9ee90b0df28cd98f5ef932"
+      "sha256": "79098e2ea3b92517161fe95674fa39867ac11f049749db860a2a5f2b6bcf2a4c"
     },
     "document_worker.py": {
       "packages": [
@@ -224,7 +224,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "9ba5b8fcc6362b131bca791808217f3829a66512d890bb71df61cb3e4da9fe83"
+      "sha256": "9942af6f9b452cf0b748256eedb367464a0edaebb93211fe298ef2cd0a349e63"
     },
     "launcher/teacher_launcher.c": {
       "packages": [
@@ -282,7 +282,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "28de3449210d967a8588e809003d1596154471dd17c54b1857dbe2cffaf99f98"
+      "sha256": "2d67b3ad3197b9137e23899fbabe0c97661b19b19cf09140392b2328a997f6a6"
     },
     "setup_free_media.ps1": {
       "packages": [
@@ -313,13 +313,13 @@
       "packages": [
         "owner"
       ],
-      "sha256": "5a1ff3aa014f7d49c7d2662f88ba83a3ab9f57a2e7dc8f8c98c85d98e0f49969"
+      "sha256": "0016d95d04301adf16aa53d8fecc57a10e9071efd770a6557f7ed819c6e57441"
     },
     "teacher.html": {
       "packages": [
         "owner"
       ],
-      "sha256": "38587cea1ce70ba373f630781880883d029be8018d8623b1d9e3b7e3fa199aa6"
+      "sha256": "f3caf7c98a22cec6dfff041e94f23781e4084f117c5fcf09b1d926734a0395af"
     },
     "teacher_app_bootstrap.py": {
       "packages": [
@@ -383,7 +383,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "3bba27b13710deb0291545e133f68ba7b8119374c279b09508dcb254e1c28703"
+      "sha256": "fe410cf52f2af1977cdbc71aad6bafce127b1608fdf37ec30fcae6627ff0f6ca"
     },
     "test_delivery.py": {
       "packages": [
@@ -493,6 +493,78 @@
         "owner"
       ],
       "sha256": "da465cef813cc38422681b4a835f4c548eaa5a14d31f7ea0595b7fe1bede3a6c"
+    },
+    "locales.js": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "2506229948502d9a750577a9b1e97d4a8b8010c705538bf70c449f1e3b0444d0"
+    },
+    "web_i18n.js": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "df1d8de10a6408b792ab511a796b879125f94deb150e844c2f9e445bcc55524b"
+    },
+    "public_translations.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "a7fd027acc02c6462796fccb38fffbe9d22109bbc12eb2599f1f5ec6e241f1cb"
+    },
+    "public_content.js": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "e95541f536ca21e5debe9c672d1440b54ff7e26e859f55275fa8b6bbcccd0f14"
+    },
+    "translation_manager.js": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "8722eab458a40dd8de77aea1307d8953a752ac81938ab9bf738d9f8060498502"
+    },
+    "teacher_page.js": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "2e56e545e27f76f5bec72eced33a8e239ec277f088ac90abc1e578cb476cbf73"
+    },
+    "test_public_translations.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "7d8d5bb0a65cc6f43f3b0b52886ab9ace02604e76a7a9c2d6a8d2dddcba9c2aa"
+    },
+    "verify_website_browser.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "7c25632256ec29ef3fc71c1fcecdc84c63b4adc50f12165ff90cbf60383d8c18"
+    },
+    "PUBLIC_TRANSLATION_SETUP.md": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "b9d890bf205cbf35f554c48e41870be1a59da6a30cb221273cfd99bfcb382985"
+    },
+    "WEBSITE_INTEGRATION.md": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "f2ba521534b6aabb188829180bf6e47f1850377d372c5468543051592ea537b1"
+    },
+    "website-review/TEST_RESULTS.md": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "101a2f1d74da2170601e26f2ed1954858525ab61c404f37fd9ba3574df07c42d"
+    },
+    "website-review/browser-results.json": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "193196366fb0daa8eef3b8e712dfc02c2b4635d279f291b80a170dd98a931030"
     }
   }
 }

@@ -1,10 +1,13 @@
 MathStudio v41.6.6 — OWNER release candidate
 
 Use INSTALL_WINDOWS.md for setup without VS Code.
-Run SETUP MATHSTUDIO.bat, then OPEN MATHSTUDIO TEACHER.bat.
+Run SETUP MATHSTUDIO.bat, then START STUDENT WEBSITE.bat to host the OWNER backend.
+Use the separately supplied, verified MathStudio.exe installer for the client-only teacher app.
 Use BUILD_RELEASE.md and release_manifest.json for provenance and source-package validation.
 
-No signed executable, bundled Python runtime or complete Windows installer is supplied.
+This OWNER source archive contains no teacher executable or bundled Python runtime.
+The separately supplied MathStudio.exe is unchanged; see installer-review in the review repository.
+See WEBSITE_INTEGRATION.md and PUBLIC_TRANSLATION_SETUP.md for website upgrades and opt-in translations.
 The old undocumented MathStudioTeacher.exe has been removed.
 Never distribute private_config.json, media_config.bat, cloud_storage.bat,
 bulletin_data, student files, logs, account databases or signing keys.
