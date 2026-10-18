@@ -21,7 +21,11 @@ try {
     $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'MathStudio.lnk'
     Check (Test-Path -LiteralPath $shortcut) 'Per-user Start menu shortcut registered'
     $shell = New-Object -ComObject WScript.Shell
-    Check ($shell.CreateShortcut($shortcut).TargetPath -eq $exe) 'Shortcut targets installed application'
+    $shortcutTarget=$shell.CreateShortcut($shortcut).TargetPath
+    $results.shortcut_target=$shortcutTarget
+    Write-Host "Shortcut: $shortcutTarget ; installed: $exe"
+    python -c "import os,sys; sys.exit(0 if os.path.samefile(sys.argv[1],sys.argv[2]) else 1)" $shortcutTarget $exe
+    Check ($LASTEXITCODE -eq 0) 'Shortcut targets installed application (file identity, including 8.3 aliases)'
     $oldPath=$env:PATH; $oldPythonHome=$env:PYTHONHOME; $oldPythonPath=$env:PYTHONPATH
     $oldLocal=$env:LOCALAPPDATA
     try {
@@ -29,6 +33,8 @@ try {
         $env:PATH="$env:SystemRoot\System32"; $env:PYTHONHOME=''; $env:PYTHONPATH=''
         $env:LOCALAPPDATA=Join-Path $env:RUNNER_TEMP 'isolated settings 中文'
         $p = Start-Process $exe -ArgumentList '--self-test' -Wait -PassThru
+        $startupError=Join-Path $env:LOCALAPPDATA 'MathStudio\teacher_startup_error.log'
+        if (Test-Path -LiteralPath $startupError) { Copy-Item -LiteralPath $startupError -Destination (Join-Path $build 'installer\runtime-startup-error.log') }
         Check ($p.ExitCode -eq 0) 'Frozen GUI/native import self-test without Python on PATH'
         $report=Join-Path $env:LOCALAPPDATA 'MathStudio\installer-self-test.json'
         Check (Test-Path -LiteralPath $report) 'Bundled self-test evidence written'
