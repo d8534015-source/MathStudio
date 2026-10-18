@@ -1,6 +1,7 @@
 """Math Studio local tutoring website. CPython 3.12–3.14. See requirements.txt for pinned optional document/media support.
 Run: py server.py | py server.py add-admin | py server.py reset-password
 """
+import public_translations
 import contextlib
 import getpass
 import hashlib
@@ -274,6 +275,7 @@ def init():
           created REAL NOT NULL, expires REAL NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_by INTEGER REFERENCES users(id));
         CREATE INDEX IF NOT EXISTS instant_meetings_class_idx ON instant_meetings(class_id);
         ''')
+        public_translations.initialize(c)
         # Additive booking migration. Existing fixed classes remain confirmed appointments.
         columns={r['name'] for r in c.execute('PRAGMA table_info(classes)')}
         for name,sql in (
@@ -1107,13 +1109,21 @@ class Handler(BaseHTTPRequestHandler):
         path=self.path_only
         if path=='/api/desktop-info': return {'build':BUILD_ID,'port':PORT,'public_origin':current_public_origin(),'lan_origin':f'http://{self.server.server_address[0] if self.server.server_address[0] not in ("0.0.0.0","::") else "127.0.0.1"}:{PORT}','cloudflare_turn_configured':bool(os.environ.get('CLOUDFLARE_TURN_KEY_ID','').strip() and os.environ.get('CLOUDFLARE_TURN_API_TOKEN','').strip())}
         if path=='/api/me': return {'user':public_user(self.user),'csrf':self.session['csrf']}
+        if path=='/api/content-translations':
+            try:
+                with db() as c: return public_translations.public(c,self.query.get('lang',['en'])[0])
+            except public_translations.TranslationError as ex: raise APIError(ex.message,ex.status)
+        if path=='/api/admin/content-translations':
+            self.require_user(True)
+            with db() as c: return public_translations.admin(c)
         if path=='/api/public':
             with db() as c:
                 settings={r['key']:r['value'] for r in c.execute('SELECT * FROM settings') if r['key'] in DEFAULTS}
                 posts=[dict(r) for r in c.execute('SELECT * FROM posts ORDER BY id DESC LIMIT 30')]
+                translations={lang:public_translations.public(c,lang)['translations'] for lang in ('en','zh')}
             try: rules=timezone_rules(settings['timezone'],datetime.now(timezone.utc).year)
             except TimezoneDataError as ex: raise APIError(str(ex),503)
-            return {'settings':settings,'posts':posts,'timezone_rules':rules}
+            return {'settings':settings,'posts':posts,'timezone_rules':rules,'content_translations':translations}
         if path=='/api/instant/info':
             self.limit_meeting_code()
             code=re.sub(r'\D','',self.query.get('code',[''])[0])
@@ -1326,8 +1336,8 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/admin': self.send_redirect('/teacher'); return None
         if path=='/build_info.js':
             self.send(('export const BUILD_ID='+json.dumps(BUILD_ID)+'; export const ASSET_VERSION='+json.dumps(ASSET_VERSION)+';').encode(),mime='text/javascript; charset=utf-8');return None
-        files={'/teacher':'teacher.html','/':'index.html' ,'/app.js':'app.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
-        if path not in files and path in ('/booking','/login','/signup','/account','/classroom','/resources','/messages','/join'): path='/'
+        files={'/teacher':'teacher.html','/teacher_page.js':'teacher_page.js','/':'index.html' ,'/app.js':'app.js','/web_i18n.js':'web_i18n.js','/locales.js':'locales.js','/public_content.js':'public_content.js','/translation_manager.js':'translation_manager.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
+        if path not in files and path in ('/booking','/login','/signup','/account','/classroom','/resources','/messages','/join','/teacher/translations'): path='/'
         need(path in files,'Page not found.',404)
         f=ROOT/files[path]; mime=mimetypes.guess_type(f.name)[0] or 'application/octet-stream'
         if f.suffix=='.js': mime='text/javascript'
@@ -1479,6 +1489,16 @@ class Handler(BaseHTTPRequestHandler):
             return {'ok':True}
         if path.startswith('/api/admin/'):
             self.require_user(True)
+            if path=='/api/admin/content-translations':
+                try: return public_translations.action(db,d,_translate_online)
+                except public_translations.TranslationError as ex: raise APIError(ex.message,ex.status)
+            if path=='/api/admin/course-description':
+                lid=d.get('id');description=d.get('description')
+                need(isinstance(lid,int) and not isinstance(lid,bool) and isinstance(description,str) and len(description)<=2000,'Invalid course description.')
+                with db() as c:
+                    need(c.execute('SELECT 1 FROM lesson_types WHERE id=?',(lid,)).fetchone(),'Course not found.',404)
+                    c.execute('UPDATE lesson_types SET description=? WHERE id=?',(description,lid))
+                return {'ok':True}
             if path=='/api/admin/files/code':
                 ids=d.get('file_ids'); need(isinstance(ids,list) and 1<=len(ids)<=50,'Select at least one file, up to 50.')
                 clean_ids=[]

@@ -1,0 +1,12 @@
+{
+  "archive": "MathStudio_v41_6_6_OWNER_Website_Integration_Candidate.zip",
+  "bytes": 346669,
+  "sha256": "7c134b69396bb5bc1a61029629b25d66db2da5fa3c4985553c679757cb315ead",
+  "allowlisted_files": 85,
+  "zip_entries": 86,
+  "crc": "passed",
+  "all_entry_bytes_match_manifest": "passed",
+  "private_runtime_files": "absent",
+  "build_id": "v41.6.6-delivery-candidate1",
+  "parent_commit": "58590f9903dc7fca01b759e6f764c703a7f4d40f"
+}
