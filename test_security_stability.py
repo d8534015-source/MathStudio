@@ -113,7 +113,7 @@ class BackendCase(unittest.TestCase):
         teacher = self.client('teacher')
         meeting = self.instant(teacher)
         cid = meeting['class_id']
-        launched = self.request('/api/admin/teacher-app-launch', {'class_id': cid}, teacher)
+        launched = self.request('/api/admin/teacher-app-launch', {'class_id': cid, 'client_launch': True}, teacher)
         self.assertEqual(launched[0], 200)
         app_token = launched[1]['token']
         media_token = self.request('/api/teacher-app/media-login-token', {'token': app_token}, teacher)[1]['media_token']

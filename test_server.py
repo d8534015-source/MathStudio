@@ -22,6 +22,7 @@ class Integration(unittest.TestCase):
         with sqlite3.connect(str(Path(cls.temp.name)/'posts.db')) as c:
             c.execute('CREATE TABLE admins(id INTEGER PRIMARY KEY,name TEXT,password TEXT)')
             c.execute('INSERT INTO admins(name,password) VALUES (?,?)',('teacher',server.hash_password('temporary-password-123')))
+        c.close()  # sqlite connection context commits; it does not close the handle.
         server.init()
         cls.http=server.ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
         threading.Thread(target=cls.http.serve_forever,daemon=True).start()
@@ -257,7 +258,7 @@ class Integration(unittest.TestCase):
         self.assertEqual(teacher('/api/login',{'username':'teacher','password':'temporary-password-123'})[0],200)
         made=teacher('/api/admin/instant-meeting',{'title':'Direct Host Meeting'})
         self.assertEqual(made[0],200); cid=made[1]['class_id']
-        launch=teacher('/api/admin/teacher-app-launch',{'class_id':cid})
+        launch=teacher('/api/admin/teacher-app-launch',{'class_id':cid,'client_launch':True})
         self.assertEqual(launch[0],200); self.assertTrue(launch[1].get('browser_url')); app_token=launch[1]['token']
         handoff=teacher('/api/teacher-app/media-login-token',{'token':app_token})
         self.assertEqual(handoff[0],200); media_token=handoff[1]['media_token']

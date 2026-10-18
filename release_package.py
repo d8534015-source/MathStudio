@@ -52,7 +52,7 @@ def main():
     parser.add_argument('--kind',choices=('owner','teacher'),required=True)
     parser.add_argument('--output',type=Path,help='Create an unsigned source candidate ZIP at this NEW path; omit to validate only.')
     args=parser.parse_args();root=Path(__file__).resolve().parent
-    manifest=json.loads((root/'release_manifest.json').read_text())
+    manifest=json.loads((root/'release_manifest.json').read_text(encoding='utf-8'))
     if args.output:print('Unsigned source candidate SHA-256: '+create_archive(root,manifest,args.kind,args.output))
     else:print('Validated '+str(len(candidate_files(root,manifest,args.kind)))+' allowlisted source files. Windows signing/installation validation is still required.')
 

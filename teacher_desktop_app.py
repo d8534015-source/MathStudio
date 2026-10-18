@@ -23,7 +23,7 @@ from studio_time import studio_zone, parse_local
 from build_info import BUILD_ID
 from runtime_paths import data_directory, state_directory
 from private_config import apply_config
-from teacher_connection import teacher_only, select_origin
+from teacher_connection import teacher_only, select_origin, check_connection
 
 ROOT = Path(__file__).resolve().parent
 PORT = 5051
@@ -196,6 +196,7 @@ class CloudflareTunnel:
                 stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL,
                 text=True,
+                encoding='utf-8',
                 errors='replace',
                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
             )
@@ -477,8 +478,7 @@ class TeacherDesktopApp:
         self.root.deiconify()
         if getattr(self,'remote',False):
             try:
-                if self.client.json('/api/desktop-info')['build']!=BUILD_ID:
-                    raise RuntimeError(self.tr('OWNER and Teacher Ready builds do not match. Ask the owner to install the matching package.'))
+                check_connection(self.client.base)
             except Exception as ex:
                 self.show_server_offline(str(ex));return
             self.show_login();return
@@ -505,14 +505,16 @@ class TeacherDesktopApp:
         card.place(relx=.5, rely=.44, anchor='center', width=560)
         ttk.Label(card, text='MathStudio Teacher', style='Title.TLabel', background='white').pack(anchor='w')
         ttk.Label(card, text='Teacher desktop application', style='Card.TLabel', foreground='#66767d').pack(anchor='w', pady=(3, 18))
-        ttk.Label(card, text='Student website is offline', style='Card.TLabel', font=('Segoe UI', 13, 'bold'), foreground='#b42318').pack(anchor='w')
-        ttk.Label(card, text=detail, style='Card.TLabel', foreground='#66767d', wraplength=490).pack(anchor='w', pady=(5, 14))
+        ttk.Label(card, text=self.tr('OWNER connection needs attention' if getattr(self,'remote',False) else 'Student website is offline'), style='Card.TLabel', font=('Segoe UI', 13, 'bold'), foreground='#b42318').pack(anchor='w')
+        ttk.Label(card, text=self.tr(detail), style='Card.TLabel', foreground='#66767d', wraplength=490).pack(anchor='w', pady=(5, 14))
         ttk.Label(card, text=('Check the OWNER HTTPS address and ask the owner to keep its backend running. Teacher Ready never starts a local backend.' if getattr(self,'remote',False) else 'First double-click START STUDENT WEBSITE.bat, leave that window open, then click Retry below.'), style='Card.TLabel', wraplength=490).pack(anchor='w', pady=(0, 16))
         row = ttk.Frame(card, style='Card.TFrame')
         row.pack(fill='x')
         ttk.Button(row, text='Retry connection', style='Accent.TButton', command=self.retry_server_connection).pack(side='left')
+        if getattr(self,'remote',False):
+            ttk.Button(row,text=self.tr('Change OWNER server'),command=self.change_owner_server).pack(side='left',padx=8)
         ttk.Button(row, text='Close', command=self.root.destroy).pack(side='left', padx=8)
-        ttk.Label(card, text='Website: port 5051  •  Teacher app: separate process', style='Card.TLabel', foreground='#839097').pack(anchor='w', pady=(18, 0))
+        ttk.Label(card, text=self.tr('Connected to OWNER HTTPS server' if getattr(self,'remote',False) else 'Website: port 5051  •  Teacher app: separate process'), style='Card.TLabel', foreground='#839097').pack(anchor='w', pady=(18, 0))
 
     def retry_server_connection(self):
         if getattr(self,'remote',False):
@@ -564,6 +566,8 @@ class TeacherDesktopApp:
                 self.refresh_all()
             except Exception as ex:
                 status.config(text=str(ex))
+        if self.remote:
+            ttk.Button(card,text=self.tr('Change OWNER server'),command=self.change_owner_server).pack(fill='x',pady=6)
         ttk.Button(card, text='Sign in to Teacher', style='Accent.TButton', command=login).pack(fill='x', ipady=3, pady=(2,0))
         ttk.Button(card, text='中文 / EN', style='Quiet.TButton', command=self.toggle_language).pack(fill='x', pady=(9,0))
         tk.Label(card, text=('Connected to OWNER HTTPS server' if self.remote else f'Connected to student website server · port {PORT}'), bg='white', fg='#8a989e', font=('Segoe UI', 8)).pack(anchor='w', pady=(18,0))
@@ -1445,7 +1449,7 @@ class TeacherDesktopApp:
         out=self.client.json('/api/admin/teacher-app-launch',payload)
         if remote:
             # Native overlay runs on the teacher PC, never the separately hosted OWNER.
-            command=[sys.executable,str(ROOT/'teacher_app_bootstrap.py'),'--server',self.client.base,
+            command=[sys.executable,('--meeting-bootstrap' if getattr(sys,'frozen',False) else str(ROOT/'teacher_app_bootstrap.py')),'--server',self.client.base,
                 '--token',out['token'],'--public-origin',self.client.base,'--skip-auto-media']
             try:
                 subprocess.Popen(command,cwd=str(ROOT),close_fds=True,
@@ -1591,7 +1595,8 @@ if __name__ == '__main__':
     except Exception:
         details = traceback.format_exc()
         try:
-            (ROOT / 'teacher_app_error.log').write_text(details, encoding='utf-8')
+            log=state_directory()/'teacher_app_error.log';log.parent.mkdir(parents=True,exist_ok=True)
+            log.write_text(details, encoding='utf-8')
         except Exception:
             pass
         try:

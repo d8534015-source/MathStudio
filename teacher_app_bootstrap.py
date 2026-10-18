@@ -56,7 +56,7 @@ def main() -> int:
     else:
         child_python = exe
 
-    cmd = [str(child_python), str(APP), "--server", args.server]
+    cmd = [str(child_python), "--meeting" if getattr(sys,"frozen",False) else str(APP), "--server", args.server]
     if args.token:
         cmd += ["--token", args.token]
     if args.public_origin:

@@ -1,3 +1,7 @@
+# Windows installer development
+
+For the bundled teacher installer **MathStudio.exe** (no separate Python or BAT launchers), see [installer instructions](packaging/windows/README.md). The source/OWNER instructions below apply only to source distributions. See the installer PR test report for actual Windows build status.
+
 # MathStudio v41.6.6 — Windows installation
 
 Build: `v41.6.6-delivery-candidate1`.
@@ -8,12 +12,12 @@ Build: `v41.6.6-delivery-candidate1`.
 
 1. Obtain the reviewed OWNER or TEACHER READY source candidate from the owner. Verify its SHA-256 against the manifest/checksum obtained through a trusted channel. Extract the whole ZIP once; do not run files inside the ZIP or mix application versions. A normal writable folder such as Documents\MathStudio is suitable. Keep all files together, including `version.json` and `requirements.txt`.
 2. Install a currently supported 64-bit CPython 3.12, 3.13, or 3.14 from **https://www.python.org/downloads/windows/**. Include pip, Tcl/Tk and the Python launcher. Use the current security update for your selected series. This Cloud validation used CPython 3.12.14 on Linux; the exact Windows interpreter/installer hash must be recorded during Windows acceptance. Python itself is not bundled.
-3. Close all MathStudio classes and stop the website before setup. Double-click **SETUP MATHSTUDIO.bat**. It creates `.venv`, installs the exact hashed wheels, checks dependencies/timezones/Tk, and shows success or a visible error. Internet access to PyPI is needed the first time. Setup refuses to run while port 5051 is listening. Re-running setup recreates this application's `.venv`; keep personal files out of that directory.
+3. Close all MathStudio classes and stop the website before setup. Double-click **SETUP MATHSTUDIO.bat**. It creates `.venv`, installs the exact hashed wheels, checks dependencies/timezones/Tk, and shows success or a visible error. Internet access to PyPI is needed the first time. OWNER setup refuses to run while port 5051 is listening; client-only Teacher Ready setup does not inspect or reserve that port. Re-running setup recreates this application's `.venv`; keep personal files out of that directory.
 4. For separately hosted delivery, first start **START STUDENT WEBSITE.bat** on OWNER. It prompts for the first admin account in its terminal if needed and keeps the backend/tunnel running. Then double-click **OPEN MATHSTUDIO TEACHER.bat** on OWNER for local administration. Alternatively, On a fresh computer, create the first teacher account in the dialog, then sign in. Use a unique password of at least 12 characters. The app starts the website if absent and reuses a matching healthy server. It never stops a process occupying port 5051. `START TEACHER APP.bat` is a compatibility alias.
 5. For remote camera/microphone use, install **cloudflared** from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/ . Verify the official download's provenance/hash and record its version during Windows acceptance. The package does not bundle or download cloudflared automatically. The Teacher App's existing tunnel feature uses the installed tool; share the HTTPS student link shown in the app. LAN HTTP is useful for bookings/files but is insufficient for media on other devices.
 6. Configure TURN using **SETUP FREE CAMERA + AUDIO.bat**, then **TEST CAMERA + AUDIO RELAY.bat**. The token input is hidden, and the checker reports success/failure without credentials. Restart the website outside class time to apply changed configuration. HTTPS alone does not guarantee relay connectivity.
 
-The website can also be started visibly with `START STUDENT WEBSITE.bat`; `START STUDENT WEBSITE - LAN ONLY.bat` forces LAN mode. The HTTPS PowerShell script respects Windows execution policy. If policy blocks it, use the Teacher App's tunnel feature, or have your administrator review/sign the script. Do not disable Windows protections, unblock an unknown executable, or bypass SmartScreen to make an unsigned package run.
+The website can also be started visibly with `START STUDENT WEBSITE.bat`; `START STUDENT WEBSITE - LAN ONLY.bat` forces LAN mode. The normal HTTPS launcher now uses Python directly, with the backend in the console process and only its own tunnel cleaned up on exit. It does not execute a PowerShell script or require execution-policy changes. Do not disable Windows protections, unblock an unknown executable, or bypass SmartScreen to make an unsigned package run.
 
 ## Private files and existing installations
 

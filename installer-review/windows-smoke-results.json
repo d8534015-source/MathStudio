@@ -1,0 +1,20 @@
+{
+  "os": "Microsoft Windows NT 10.0.26100.0",
+  "windows11": false,
+  "install_path": "C:\\Users\\runneradmin\\AppData\\Local\\MathStudio install test 中文 ü long folder long folder long folder long folder long folder app",
+  "tests": [
+    "Per-user install with port 5051 occupied and Unicode/space/long path",
+    "Installed executable",
+    "Bundled Python runtime",
+    "No OWNER backend source",
+    "Per-user Start menu shortcut registered",
+    "Unicode Start menu shortcut targets installed application",
+    "Frozen GUI/native import self-test without Python on PATH",
+    "Bundled self-test evidence written",
+    "Bundled runtime and no console window",
+    "Current-user uninstall registration",
+    "Uninstall removes installed executable",
+    "Uninstall removes Start menu shortcut",
+    "Reinstall"
+  ]
+}
