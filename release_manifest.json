@@ -41,13 +41,13 @@
       "packages": [
         "owner"
       ],
-      "sha256": "38988efffae40d0f3c72c6541def665f22c38a845502899583fe13359f963ea1"
+      "sha256": "924340c0ee6d61697433e516e9c066e2f34da11ad0ba8d331c3ce478421bee61"
     },
     "BUILD_RELEASE.md": {
       "packages": [
         "owner"
       ],
-      "sha256": "53b78144d6477665c6a936ae22abecaf398321b965beebc038a27bc51f537f8b"
+      "sha256": "355148d93f33cbc77213fa834df9fc689813fca36f2a335952bca098abc51971"
     },
     "CHANGE OWNER SERVER.bat": {
       "packages": [
@@ -68,7 +68,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "cc9a194137ef9e2b1424752e302220cd8de7f2cb95219345cd19730993dc3a4f"
+      "sha256": "ce5a99784cbc6e6878fbf4d81b7b0b3d7a4ea4dbee1317e16962276dc6920358"
     },
     "OPEN MATHSTUDIO TEACHER.bat": {
       "packages": [
@@ -377,7 +377,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "c633efbbcf52ca17a60c444250739f68a368dd9ef30f67f9298206b68bed9432"
+      "sha256": "4e8c8b4ec3353d4eb9105d4318cc5c16bdfc7f30360b259f64b8391ed78bff7b"
     },
     "test_browser_workflows.mjs": {
       "packages": [
@@ -401,13 +401,13 @@
       "packages": [
         "owner"
       ],
-      "sha256": "55d5a4c078de5afc151489f63182b812f77f0aed37a4162f2607d93953e36dbd"
+      "sha256": "3374be5b551f0588721bbda2e6c1709036b04cebe1dc1a51ce879ce1ec757458"
     },
     "test_server.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "b9a895d98818c16054f0d587449f171dd2bdbc99ecd582def6b2d0ee779502d2"
+      "sha256": "12162e59abe8c5d7f154ba88b0c83a0f0a19f6d84dd8f9c101bc6ad96d273eda"
     },
     "test_teaching_workflows.py": {
       "packages": [
@@ -480,7 +480,13 @@
       "packages": [
         "owner"
       ],
-      "sha256": "c5e44fdc52ba3a8881ec544231f147d6fdd833114b0d60bf5abf44e49cd84fbd"
+      "sha256": "7477af2b0da878d68cbdb9c37a81c0684d501a17d3e0d9563703a6129de023b6"
+    },
+    "packaging/windows/check_owner_cleanup.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "cbc6e539958d90d3e15102fd31bd54ba6a84e3d076b1d6fa4474e2c381bc1d51"
     }
   }
 }

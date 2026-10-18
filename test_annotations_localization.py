@@ -195,7 +195,7 @@ from test_security_stability import BackendCase
 class AnnotationAuthorizationTests(BackendCase):
     def test_media02_native_share_preserves_browser_and_overlay_permissions(self):
         teacher, student, cid, tp, sp = self.room()
-        launch=self.request('/api/admin/teacher-app-launch',{'class_id':cid},teacher)
+        launch=self.request('/api/admin/teacher-app-launch',{'class_id':cid,'client_launch':True},teacher)
         self.assertEqual(launch[0],200,launch[1]); token=launch[1]['token']
         self.assertEqual(self.request('/api/teacher-app/screen',{'token':token,'active':True})[0],200)
         overlay=self.request('/api/room/overlay-token',{'class_id':cid,'peer':sp},student)[1]['token']

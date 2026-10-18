@@ -1,3 +1,7 @@
+# Bundled Windows installer development
+
+The source ZIP recipe below is retained for OWNER/source delivery. The new teacher installer build is documented in [packaging/windows/README.md](packaging/windows/README.md), using a bundled runtime, PyInstaller and Inno Setup. Its Windows runner evidence is recorded separately; source ZIP validation does not validate the installer.
+
 # MathStudio v41.6.6 — provenance and release procedure
 
 Status: **unsigned source candidate only**. A manifest or passing Python test is not proof of a signed executable, working Windows installer, or physical-device WebRTC. No release is published by these steps.

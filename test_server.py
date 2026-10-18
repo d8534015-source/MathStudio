@@ -257,7 +257,7 @@ class Integration(unittest.TestCase):
         self.assertEqual(teacher('/api/login',{'username':'teacher','password':'temporary-password-123'})[0],200)
         made=teacher('/api/admin/instant-meeting',{'title':'Direct Host Meeting'})
         self.assertEqual(made[0],200); cid=made[1]['class_id']
-        launch=teacher('/api/admin/teacher-app-launch',{'class_id':cid})
+        launch=teacher('/api/admin/teacher-app-launch',{'class_id':cid,'client_launch':True})
         self.assertEqual(launch[0],200); self.assertTrue(launch[1].get('browser_url')); app_token=launch[1]['token']
         handoff=teacher('/api/teacher-app/media-login-token',{'token':app_token})
         self.assertEqual(handoff[0],200); media_token=handoff[1]['media_token']

@@ -17,3 +17,6 @@ wheelhouse/
 staging/
 *.obj
 *.pdb
+
+work/
+packaging/windows/generated/

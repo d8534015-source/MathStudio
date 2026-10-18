@@ -8,6 +8,9 @@ on:
       - 'release_manifest.json'
       - 'packaging/windows/**'
       - '.github/workflows/windows-installer.yml'
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -36,6 +39,8 @@ jobs:
           python -m unittest test_windows_startup -v
       - name: Build bundled client and single-file installer
         run: python packaging/windows/build.py
+      - name: Test owned Windows tunnel job cleanup
+        run: python packaging/windows/check_owner_cleanup.py
       - name: Install, launch without Python on PATH, uninstall, reinstall
         run: ./packaging/windows/smoke.ps1
       - name: Preserve installer and evidence for review (no release publication)
