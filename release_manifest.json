@@ -200,7 +200,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "cd6a1734dd5f4ca66252f64ec8e72dece2abbb01f078e85641e0f8a5661f78de"
+      "sha256": "e14fb341b17fdc9a5425ed1f6bc676a2e96fb892451456d37e1872155984843e"
     },
     "diagnostics.js": {
       "packages": [
@@ -249,7 +249,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "79871366189f8c3c1ea03a98f53cd8de3450b92411536d718948512bcf0f40d3"
+      "sha256": "51bb9490252c42f21c58c0dec5bd98297bc5299944610564448e42f5ab5eef9c"
     },
     "requirements.txt": {
       "packages": [
@@ -276,7 +276,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "3db45a775e9f7b738fe9d12b7b8e31fe0e6ac489e1063a57e6809bfe111a0580"
+      "sha256": "3ab800210004e8d231f3474c237eb9de00e672ba2c6f3a9d5e802225e5132de9"
     },
     "server.py": {
       "packages": [
@@ -294,7 +294,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "476a58b4935ae564b82a8553faafbfeaa4aaaf9be4e4873405effdaffa97f832"
+      "sha256": "beb92f24cbd46e456c8413c0933c2baaf0c5a97aea6a0ad66651664c45d52ec3"
     },
     "studio_time.js": {
       "packages": [
@@ -326,7 +326,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "0d2ba38b6dd9e46d7bd3600ccac685999105a4f85a2ed31f94068e457b91598f"
+      "sha256": "4a4a30215d1b50dc9e40182177599f4d0af2c5e9e8fa2aecaf8b0adabfa81818"
     },
     "teacher_app_start_hidden.bat": {
       "packages": [
@@ -340,21 +340,21 @@
         "owner",
         "teacher"
       ],
-      "sha256": "f6a7666207c929fdab94374dd070adcc482411f6033366766ce9f6e410afefa8"
+      "sha256": "3ae6a00af829bd7a909b600212e390644adac3e301b52ee103fd9ed85036490c"
     },
     "teacher_desktop_app.py": {
       "packages": [
         "owner",
         "teacher"
       ],
-      "sha256": "562be5ab9ce8ce35b3c729f829938b5d16e99bd8b301e19228b4dc98fce79bd7"
+      "sha256": "3c81b2fab135ccdff706f9daa3dd6ced6d0097c33926f465cfba89016398f5d5"
     },
     "teacher_localization.py": {
       "packages": [
         "owner",
         "teacher"
       ],
-      "sha256": "8d273c35da1671eace5a6790cc5f3c236428e2901c5d5049a8150defb2bb08a7"
+      "sha256": "d4866c3b6279e8b726a099513e95e879c7629413ae566f09cf5dd5210ec6c9c1"
     },
     "teacher_meeting_app.py": {
       "packages": [
@@ -389,7 +389,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "e2923be4d8f447ff030c9e6d749574dc2f688fed19894e417b61ea66ae3d7f1a"
+      "sha256": "0f25145325abe50fd9c638ebc5dc42545a12206181f2b091a9abc34b89cfa9d0"
     },
     "test_release_hardening.py": {
       "packages": [
@@ -421,6 +421,66 @@
         "teacher"
       ],
       "sha256": "a7767dc6ab71711eb23ba7f5c14ca6e66f3ae8fafd2fe96a31bf46363a43313b"
+    },
+    "owner_launcher.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "94d7e4e4bfc098d18858f780010dbb37e846576e853425d83ac63eac1a1ee672"
+    },
+    "windows_teacher.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "bfbedfe2d38a19225cca3de5cfbdbeb0635dd9ae36692ed3390971006e399942"
+    },
+    "test_windows_startup.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "8231c15eb78364962301f0892fc466f26f35704a98739ae0cc9963eaca20a36e"
+    },
+    "packaging/windows/build.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "b8282046018c7e0b7252acc48c7ca86818514ae30598ed96843081ca427c087b"
+    },
+    "packaging/windows/MathStudio.spec": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "ca886ef442c983b49d8396d6554fcaf690e1066b53e4124d0cece88a3da4c131"
+    },
+    "packaging/windows/MathStudio.iss": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "464cba6e42a9b98fea165a99781c73bcd1ddaac703420468a5b183647637e0c3"
+    },
+    "packaging/windows/requirements-build.txt": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "255054bbf061d965ea155c54e616ee347f277623a43fa05a1e514ae1ae094b81"
+    },
+    "packaging/windows/smoke.ps1": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "4ce8209ddc59234599d553a89808bc9bf519f43623ad5efb8193b244d4925ad9"
+    },
+    "packaging/windows/README.md": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "a9378cf92faf27864a712c1cf8a5cb5094f736088ee83698d1a63bceb94baba5"
+    },
+    ".github/workflows/windows-installer.yml": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "3208cfe7adc1eeeec30f14bce0a8b05cf52318265f8bdcdae8bfb5ef57535750"
     }
   }
 }

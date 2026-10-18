@@ -201,6 +201,8 @@ PATTERNS = [
  (r'^Uploaded (\d+) file\(s\)\.$', lambda m:'已上传 '+m[1]+' 个文件。'),
 ]
 
+ZH.update({'OWNER connection needs attention': 'OWNER 连接需要检查', 'OWNER redirected to another address. Enter the current OWNER HTTPS address.': 'OWNER 重定向至其他地址，请输入当前 OWNER HTTPS 地址。', 'This address did not return a MathStudio OWNER response. Check the tunnel and address.': '此地址未返回 MathStudio OWNER 响应，请检查隧道和地址。', 'The OWNER gateway requires authentication. Ask the owner to check gateway access; teacher login is separate.': 'OWNER 网关要求身份验证，请联系所有者检查网关权限。教师登录另行进行。', 'The HTTPS gateway is reachable, but OWNER is unavailable. Ask the owner to check the backend and tunnel.': 'HTTPS 网关可访问，但 OWNER 不可用，请联系所有者检查后端和隧道。', 'The OWNER address returned an HTTP error. Check the current server address.': 'OWNER 地址返回 HTTP 错误，请检查当前服务器地址。', 'The OWNER TLS certificate could not be verified. Ask the owner to repair HTTPS; do not disable certificate checks.': '无法验证 OWNER TLS 证书，请联系所有者修复 HTTPS，请勿禁用证书检查。', 'The OWNER connection timed out. Check your Internet connection, then retry or update the tunnel address.': 'OWNER 连接超时，请检查网络后重试或更新隧道地址。', 'The OWNER address could not be reached. Check Internet access and the current tunnel address, then retry.': '无法访问 OWNER 地址，请检查网络和当前隧道地址后重试。', 'Enter the OWNER HTTPS origin only, for example https://mathstudio.example.org (no password, path or query).': '仅输入 OWNER HTTPS 根地址，例如 https://mathstudio.example.org（不包含密码、路径或查询参数）。', 'Invalid OWNER server port.': 'OWNER 服务器端口无效。'})
+
 PREF_DIR = Path(os.environ.get('APPDATA') or Path.home()) / 'MathStudio'
 PREF_PATH = PREF_DIR / 'teacher_ui_preferences.json'
 

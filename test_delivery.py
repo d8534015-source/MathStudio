@@ -19,11 +19,12 @@ class RemoteClientTests(unittest.TestCase):
         events=[]
         ns=extracted_functions('teacher_desktop_app.py',{'_bootstrap'},
             {'BUILD_ID':'same','ensure_admin_account':lambda *a:events.append('account'),
-             'start_server_process':lambda:events.append('server'),'can_connect':lambda:False})
+             'start_server_process':lambda:events.append('server'),'can_connect':lambda:False,
+             'check_connection':lambda origin:None if build=='same' else (_ for _ in ()).throw(ValueError('mismatch'))})
         for build in ('same','wrong'):
             events.clear()
             obj=SimpleNamespace(remote=True,root=SimpleNamespace(deiconify=lambda:None),tr=lambda s:s,
-                client=SimpleNamespace(json=lambda path:{'build':build}),show_login=lambda:events.append('login'),
+                client=SimpleNamespace(base='https://owner.example',json=lambda path:{'build':build}),show_login=lambda:events.append('login'),
                 show_server_offline=lambda message:events.append('offline'))
             MethodType(ns['_bootstrap'],obj)()
             self.assertEqual(events,['login'] if build=='same' else ['offline'])

@@ -8,7 +8,7 @@ import struct
 
 def pinned_versions():
     return dict(re.findall(r'^([A-Za-z0-9_-]+)==([0-9][^\s\\]*)',
-        Path(__file__).with_name('requirements.txt').read_text(),re.M))
+        Path(__file__).with_name('requirements.txt').read_text(encoding='utf-8'),re.M))
 
 
 def require_distribution(name):

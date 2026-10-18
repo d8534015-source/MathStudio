@@ -24,10 +24,11 @@ def install(wheelhouse=None):
     if not (3,12)<=sys.version_info[:2]<(3,15):
         raise RuntimeError('Install current supported 64-bit CPython 3.12, 3.13 or 3.14 from python.org, with Tcl/Tk and pip.')
     if struct.calcsize('P')!=8:raise RuntimeError('Install 64-bit CPython.')
-    try:
-        with socket.create_connection(('127.0.0.1',5051),timeout=.5):
-            raise RuntimeError('Port 5051 is in use. Finish all classes and stop MathStudio before installing dependencies.')
-    except OSError:pass
+    if not teacher_only():
+        try:
+            with socket.create_connection(('127.0.0.1',5051),timeout=.5):
+                raise RuntimeError('Port 5051 is in use. Finish all classes and stop MathStudio before installing dependencies.')
+        except OSError:pass
     if VENV.exists() and not (VENV/'pyvenv.cfg').is_file():raise RuntimeError('Refusing to replace a folder that is not a Python environment.')
     if VENV.is_symlink():raise RuntimeError('The runtime folder must not be a symbolic link.')
     venv.EnvBuilder(with_pip=True,clear=VENV.exists()).create(VENV)
@@ -57,9 +58,10 @@ def launch(kind):
     else:
         env=apply_config(os.environ.copy())
     env['PORT']='5051'
-    if kind=='website' and cloudflared_available():
-        env['MATH_PYTHON']=str(runtime_python())
-        return subprocess.call(['powershell.exe','-NoProfile','-File',str(ROOT/'start_https.ps1')],cwd=ROOT,env=env)
+    if kind!='teacher':
+        # Run the backend in this console process so Ctrl+C cannot orphan it.
+        from owner_launcher import main as owner_main
+        return owner_main(tunnel=kind=='website' and cloudflared_available(),env=env)
     script='teacher_desktop_app.py' if kind=='teacher' else 'server.py'
     if kind!='teacher':env['BIND_HOST']='0.0.0.0'
     return subprocess.call([sys.executable,str(ROOT/script)],cwd=ROOT,env=env)
