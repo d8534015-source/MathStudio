@@ -1,5 +1,7 @@
 # Public-content translation setup
 
+Free offline Argos setup is documented in [ARGOS_OFFLINE_SETUP.md](ARGOS_OFFLINE_SETUP.md). A verified local installation uses the same draft/approval workflow without sending text to an external service.
+
 External public-content translation is **off by default**. No provider or credentials are bundled. The supplied workflow also supports manual translation without an external service.
 
 ## Teacher workflow
