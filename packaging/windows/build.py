@@ -62,7 +62,10 @@ def main():
     from build_info import BUILD_ID
     inventory={str(p.relative_to(output/'dist')):hashlib.sha256(p.read_bytes()).hexdigest()
         for p in (output/'dist').rglob('*') if p.is_file()}
-    (installer.parent/'build-manifest.json').write_text(json.dumps({'build':BUILD_ID,'python':sys.version,
+    (installer.parent/'build-manifest.json').write_text(json.dumps({'build':BUILD_ID,'python':sys.version,'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True,encoding='utf-8').strip(),
+        'source_manifest_sha256':hashlib.sha256((ROOT/'release_manifest.json').read_bytes()).hexdigest(),
+        'requirements_sha256':hashlib.sha256((ROOT/'requirements.txt').read_bytes()).hexdigest(),
+        'build_requirements_sha256':hashlib.sha256((HERE/'requirements-build.txt').read_bytes()).hexdigest(),
         'compiler_sha256':INNO_SHA,'signed':False,'payload':inventory},indent=2)+'\n',encoding='utf-8')
     print('Unsigned installer built: '+str(installer)+' SHA256 '+digest)
 

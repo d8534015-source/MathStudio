@@ -2,9 +2,9 @@
 $ErrorActionPreference = 'Stop'
 $build = Join-Path $env:GITHUB_WORKSPACE 'work\windows-build'
 $installer = Join-Path $build 'installer\MathStudio.exe'
-$target = Join-Path $env:LOCALAPPDATA ('MathStudio install test 中文 ü ' + ('long folder ' * 5))
+$target = Join-Path $env:LOCALAPPDATA ('MathStudio install test 中文 ü ' + ('long folder ' * 5) + 'app')
 $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 5051)
-$results = [ordered]@{os=[Environment]::OSVersion.VersionString; windows11=$false; tests=@()}
+$results = [ordered]@{os=[Environment]::OSVersion.VersionString; windows11=$false; install_path=$target; tests=@()}
 function Check([bool]$ok, [string]$name) {
     if (-not $ok) { throw "FAILED: $name" }
     $script:results.tests += $name
@@ -12,7 +12,7 @@ function Check([bool]$ok, [string]$name) {
 }
 try {
     $listener.Start()
-    $p = Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',('/DIR="' + $target + '"')) -Wait -PassThru
+    $p = Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',('/DIR="' + $target + '"'),('/LOG="' + (Join-Path $build 'installer\install-smoke.log') + '"')) -Wait -PassThru
     Check ($p.ExitCode -eq 0) 'Per-user install with port 5051 occupied and Unicode/space/long path'
     $exe = Join-Path $target 'MathStudioClient.exe'
     Check (Test-Path -LiteralPath $exe) 'Installed executable'
@@ -44,7 +44,7 @@ try {
     $p=Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
     Check ($p.ExitCode -eq 0 -and -not (Test-Path $exe)) 'Uninstall removes installed executable'
     Check (-not (Test-Path -LiteralPath $shortcut)) 'Uninstall removes Start menu shortcut'
-    $p=Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',('/DIR="' + $target + '"')) -Wait -PassThru
+    $p=Start-Process $installer -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',('/DIR="' + $target + '"'),('/LOG="' + (Join-Path $build 'installer\install-smoke.log') + '"')) -Wait -PassThru
     Check ($p.ExitCode -eq 0 -and (Test-Path $exe)) 'Reinstall'
     $p=Start-Process $uninstaller -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART') -Wait -PassThru
 } finally {

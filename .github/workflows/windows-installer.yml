@@ -64,3 +64,6 @@ jobs:
           path: work/windows-build/installer/*
           if-no-files-found: warn
           retention-days: 14
+      - name: Require complete Windows regression success
+        if: always() && steps.regression.outcome != 'success'
+        run: throw 'Windows regression suite did not pass. Inspect windows-regression.log; installer artifacts remain review candidates only.'

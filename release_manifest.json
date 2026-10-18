@@ -407,7 +407,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "12162e59abe8c5d7f154ba88b0c83a0f0a19f6d84dd8f9c101bc6ad96d273eda"
+      "sha256": "9deddbf73fd95f3daa1e132a4d555bf7c4a57dfe888059a48eb1744f7280f43e"
     },
     "test_teaching_workflows.py": {
       "packages": [
@@ -444,7 +444,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "b8282046018c7e0b7252acc48c7ca86818514ae30598ed96843081ca427c087b"
+      "sha256": "62d2aa53e5e145167b7991f20c0d49ac581b9123454e8f87a3a90e54dd7f190a"
     },
     "packaging/windows/MathStudio.spec": {
       "packages": [
@@ -468,7 +468,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "4ce8209ddc59234599d553a89808bc9bf519f43623ad5efb8193b244d4925ad9"
+      "sha256": "15e96efbaf710abaf33e34ec0dac3b64fe2cb20510fb80edf1d2e3216760d71a"
     },
     "packaging/windows/README.md": {
       "packages": [
@@ -480,7 +480,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "4d47d49dd144e55ca997624b277ab9372896bfb6acedf480abacddbd499113b2"
+      "sha256": "f35d709e8c13022f8d25903fcacc4ace47fde05799974074c3548f8f539024ca"
     },
     "packaging/windows/check_owner_cleanup.py": {
       "packages": [

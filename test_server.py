@@ -22,6 +22,7 @@ class Integration(unittest.TestCase):
         with sqlite3.connect(str(Path(cls.temp.name)/'posts.db')) as c:
             c.execute('CREATE TABLE admins(id INTEGER PRIMARY KEY,name TEXT,password TEXT)')
             c.execute('INSERT INTO admins(name,password) VALUES (?,?)',('teacher',server.hash_password('temporary-password-123')))
+        c.close()  # sqlite connection context commits; it does not close the handle.
         server.init()
         cls.http=server.ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
         threading.Thread(target=cls.http.serve_forever,daemon=True).start()
