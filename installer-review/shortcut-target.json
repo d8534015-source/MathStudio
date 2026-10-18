@@ -1,0 +1,5 @@
+{
+  "target": "C:\\Users\\runneradmin\\AppData\\Local\\MathStudio install test 中文 ü long folder long folder long folder long folder long folder app\\MathStudioClient.exe",
+  "expected": "C:\\Users\\runneradmin\\AppData\\Local\\MathStudio install test 中文 ü long folder long folder long folder long folder long folder app\\MathStudioClient.exe",
+  "same_file": true
+}
