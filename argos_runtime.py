@@ -18,7 +18,10 @@ class ArgosError(Exception):
 
 
 def home():
-    path = Path(os.environ.get('MATH_ARGOS_HOME') or state_directory()/'translation').expanduser().resolve()
+    selected = Path(os.environ.get('MATH_ARGOS_HOME') or state_directory()/'translation').expanduser()
+    if not selected.is_absolute():
+        raise ArgosError('Argos storage must use an absolute path.')
+    path = selected.resolve()
     if path == ROOT or ROOT in path.parents:
         raise ArgosError('Argos storage must be outside the application folder.')
     return path
@@ -51,7 +54,8 @@ def environment(base):
     # Inference receives no API keys, TURN secrets, account paths or provider credentials.
     allowed = ('PATH','SYSTEMROOT','WINDIR','TEMP','TMP','COMSPEC','PATHEXT','LD_LIBRARY_PATH')
     env = {k: os.environ[k] for k in allowed if k in os.environ}
-    env.update(PYTHONUTF8='1', PYTHONIOENCODING='utf-8', ARGOS_PACKAGES_DIR=str(base/'packages'),
+    env.update(USERPROFILE=str(base), LOCALAPPDATA=str(base/'cache'), APPDATA=str(base/'config'),
+               STANZA_RESOURCES_DIR=str(base/'data'/'stanza'), PYTHONUTF8='1', PYTHONIOENCODING='utf-8', ARGOS_PACKAGES_DIR=str(base/'packages'),
                XDG_DATA_HOME=str(base/'data'), XDG_CONFIG_HOME=str(base/'config'), XDG_CACHE_HOME=str(base/'cache'),
                ARGOS_MODEL_PROVIDER='OPENNMT', ARGOS_DEVICE_TYPE='cpu', ARGOS_CHUNK_TYPE='STANZA',
                ARGOS_INTER_THREADS='1', ARGOS_INTRA_THREADS='1', ARGOS_COMPUTE_TYPE='int8',
@@ -86,7 +90,7 @@ def translate(text, target):
             raise ArgosError('Offline translation failed. Original content is unchanged.')
         try:
             translated = json.loads(result.stdout)['pieces']
-            if len(translated) != len(pieces[::2]) or any(not isinstance(x,str) or len(x)>20000 for x in translated):
+            if not isinstance(translated,list) or len(translated) != len(pieces[::2]) or any(not isinstance(x,str) or len(x)>20000 for x in translated):
                 raise ValueError()
         except (ValueError, KeyError, TypeError):
             raise ArgosError('Offline translation failed. Original content is unchanged.') from None

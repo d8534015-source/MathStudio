@@ -47,7 +47,9 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(ar.ready())
 
     def test_external_storage_survives_source_location_and_rejects_in_tree(self):
-        self.assertEqual(ar.home(),Path(self.temp.name))
+        self.assertEqual(ar.home(),Path(self.temp.name).resolve())
+        with mock.patch.dict(os.environ,{'MATH_ARGOS_HOME':'relative-models'}):
+            with self.assertRaises(ar.ArgosError):ar.home()
         with mock.patch.dict(os.environ,{'MATH_ARGOS_HOME':str(ar.ROOT/'models')}):
             with self.assertRaises(ar.ArgosError):ar.home()
 
@@ -60,8 +62,9 @@ class RuntimeTests(unittest.TestCase):
                 self.assertFalse(any('KEY' in key or 'TOKEN' in key for key in kwargs['env']))
                 self.assertEqual(kwargs['env']['ARGOS_INTRA_THREADS'],'1')
                 self.assertEqual(kwargs['env']['ARGOS_DEVICE_TYPE'],'cpu')
+                self.assertEqual(Path(kwargs['env']['USERPROFILE']).resolve(),Path(self.temp.name).resolve())
                 self.assertEqual(kwargs['timeout'],30)
-                self.assertEqual(kwargs['cwd'],self.temp.name)
+                self.assertEqual(Path(kwargs['cwd']).resolve(),Path(self.temp.name).resolve())
                 request=json.loads(kwargs['input']);self.assertEqual(request['pieces'],['Learn ',' today.'])
                 return subprocess.CompletedProcess(command,0,json.dumps({'pieces':['学习 ',' 今天。']}))
             with mock.patch.object(ar.subprocess,'run',side_effect=run):
@@ -75,7 +78,7 @@ class RuntimeTests(unittest.TestCase):
         try:
             with self.assertRaisesRegex(ar.ArgosError,'busy'):ar.translate('Hello','zh')
         finally:ar._SLOT.release()
-        for result in [subprocess.CompletedProcess([],2,''),subprocess.CompletedProcess([],0,'{}'),subprocess.CompletedProcess([],0,json.dumps({'pieces':[]}))]:
+        for result in [subprocess.CompletedProcess([],2,''),subprocess.CompletedProcess([],0,'{}'),subprocess.CompletedProcess([],0,json.dumps({'pieces':[]})),subprocess.CompletedProcess([],0,json.dumps({'pieces':'x'}))]:
             with mock.patch.object(ar.subprocess,'run',return_value=result):
                 with self.assertRaises(ar.ArgosError):ar.translate('Hello','zh')
         self.assertTrue(ar._SLOT.acquire(False));ar._SLOT.release()
@@ -83,7 +86,9 @@ class RuntimeTests(unittest.TestCase):
     def archive(self,names):
         buffer=io.BytesIO()
         with zipfile.ZipFile(buffer,'w') as z:
-            for name,value in names.items():z.writestr(name,value)
+            for name,value in names.items():
+                info=zipfile.ZipInfo(name);info.filename=name  # Keep malicious backslashes on Windows too.
+                z.writestr(info,value)
         buffer.seek(0);return buffer
 
     def test_setup_refuses_unsafe_models_wrong_pair_and_running_owner(self):

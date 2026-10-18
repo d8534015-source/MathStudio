@@ -853,7 +853,8 @@ export const EN={
   "error.argos_5": "Offline translation failed. Original content is unchanged.",
   "error.argos_6": "Offline translation result is too large.",
   "error.argos_7": "Argos storage must be outside the application folder.",
-  "error.argos_8": "Invalid offline translation request."
+  "error.argos_8": "Invalid offline translation request.",
+  "error.argos_absolute_path": "Argos storage must use an absolute path."
 };
 export const ZH={
   "ui.media_link_connected_to_1_participant": "媒体连接：已连接 1 位参与者。",
@@ -1709,7 +1710,8 @@ export const ZH={
   "error.argos_5": "离线翻译失败，原文未更改。",
   "error.argos_6": "离线翻译结果过大。",
   "error.argos_7": "Argos 存储位置必须在应用文件夹之外。",
-  "error.argos_8": "离线翻译请求无效。"
+  "error.argos_8": "离线翻译请求无效。",
+  "error.argos_absolute_path": "Argos 存储位置必须使用绝对路径。"
 };
 export const KEYS={
   "Media link: connected to 1 participant.": "ui.media_link_connected_to_1_participant",
@@ -2564,5 +2566,6 @@ export const KEYS={
   "Offline translation failed. Original content is unchanged.": "error.argos_5",
   "Offline translation result is too large.": "error.argos_6",
   "Argos storage must be outside the application folder.": "error.argos_7",
-  "Invalid offline translation request.": "error.argos_8"
+  "Invalid offline translation request.": "error.argos_8",
+  "Argos storage must use an absolute path.": "error.argos_absolute_path"
 };

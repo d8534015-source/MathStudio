@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path, PurePosixPath
 import shutil
 import socket
@@ -36,7 +37,7 @@ def stopped_owner():
 def check_host():
     if sys.version_info[:2] != (3,13) or struct.calcsize('P') != 8:
         raise RuntimeError('Run with 64-bit CPython 3.13: py -3.13 argos_setup.py install')
-    if sys.platform not in ('win32','linux'):
+    if sys.platform not in ('win32','linux') or platform.machine().lower() not in ('amd64','x86_64'):
         raise RuntimeError('This dependency lock supports Windows x64 and Linux x64 only.')
     stopped_owner()
     data=data_directory(ROOT)
@@ -105,6 +106,7 @@ def install(model_files=None,wheelhouse=None):
         if wheelhouse:command+=['--no-index','--find-links',str(Path(wheelhouse).resolve())]
         else:command+=['--index-url','https://pypi.org/simple','--extra-index-url','https://download.pytorch.org/whl/cpu']
         subprocess.run(command,check=True)
+        subprocess.run([str(argos_runtime.python_path()),'-m','pip','check'],check=True)
         (base/'packages').mkdir(exist_ok=True)
         installed={}
         with tempfile.TemporaryDirectory(prefix='setup-',dir=base) as scratch:
@@ -124,7 +126,7 @@ def install(model_files=None,wheelhouse=None):
                 result=subprocess.run([str(argos_runtime.python_path()),'-I','-u',str(ROOT/'argos_worker.py')],
                     input=json.dumps({'target':target,'pieces':[text]}),encoding='utf-8',stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,timeout=argos_runtime.TIMEOUT,cwd=base,env=env)
-                if result.returncode:raise RuntimeError('Offline model self-test failed. No new models were activated.')
+                if result.returncode:raise RuntimeError('Offline model self-test failed. No new models were activated. '+result.stderr[-2000:])
                 translated=json.loads(result.stdout)['pieces'][0]
                 if not translated.strip() or translated.strip()==text:raise RuntimeError('Offline model self-test produced no translation.')
                 examples.append({'target':target,'source':text,'translation':translated})
@@ -164,7 +166,7 @@ def main():
     if args.action=='status':
         print(json.dumps({'home':str(argos_runtime.home()),'ready':argos_runtime.ready()},indent=2));return
     try:install(args.model_files,args.wheelhouse)
-    except (OSError,RuntimeError,ValueError,subprocess.SubprocessError,zipfile.BadZipFile) as ex:
+    except (OSError,RuntimeError,ValueError,KeyError,argos_runtime.ArgosError,subprocess.SubprocessError,zipfile.BadZipFile) as ex:
         print('Offline translation setup failed:',str(ex),file=sys.stderr);sys.exit(1)
 
 
