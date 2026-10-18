@@ -20,12 +20,9 @@ try {
     Check (-not [bool](Get-ChildItem -LiteralPath $target -Recurse -Filter 'server.py')) 'No OWNER backend source'
     $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'MathStudio.lnk'
     Check (Test-Path -LiteralPath $shortcut) 'Per-user Start menu shortcut registered'
-    $shell = New-Object -ComObject WScript.Shell
-    $shortcutTarget=$shell.CreateShortcut($shortcut).TargetPath
-    $results.shortcut_target=$shortcutTarget
-    Write-Host "Shortcut: $shortcutTarget ; installed: $exe"
-    python -c "import os,sys; sys.exit(0 if os.path.samefile(sys.argv[1],sys.argv[2]) else 1)" $shortcutTarget $exe
-    Check ($LASTEXITCODE -eq 0) 'Shortcut targets installed application (file identity, including 8.3 aliases)'
+    Copy-Item -LiteralPath $shortcut -Destination (Join-Path $build 'installer\MathStudio-shortcut.lnk')
+    python packaging/windows/check_shortcut.py $shortcut $exe (Join-Path $build 'installer\shortcut-target.json')
+    Check ($LASTEXITCODE -eq 0) 'Unicode Start menu shortcut targets installed application'
     $oldPath=$env:PATH; $oldPythonHome=$env:PYTHONHOME; $oldPythonPath=$env:PYTHONPATH
     $oldLocal=$env:LOCALAPPDATA
     try {

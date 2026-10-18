@@ -468,7 +468,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "f1309b06b31f3b038229e4303c734a4cfaedb29c98149387b3c9b4d45c5a5541"
+      "sha256": "4b1c09c8835014c408ee2a893ec40e6ad46c4505ce69960246c98452650872cd"
     },
     "packaging/windows/README.md": {
       "packages": [
@@ -487,6 +487,12 @@
         "owner"
       ],
       "sha256": "cbc6e539958d90d3e15102fd31bd54ba6a84e3d076b1d6fa4474e2c381bc1d51"
+    },
+    "packaging/windows/check_shortcut.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "da465cef813cc38422681b4a835f4c548eaa5a14d31f7ea0595b7fe1bede3a6c"
     }
   }
 }
