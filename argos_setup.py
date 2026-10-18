@@ -79,12 +79,18 @@ def unpack_model(archive,destination,pair):
         entries=source.infolist()
         if len(entries)>10000 or sum(x.file_size for x in entries)>2*1024**3:
             raise RuntimeError('Model archive is unexpectedly large.')
-        roots=set()
+        roots=set();seen=set()
+        reserved={'CON','PRN','AUX','NUL'}|{f'{prefix}{n}' for prefix in ('COM','LPT') for n in range(1,10)}
         for item in entries:
             name=PurePosixPath(item.filename)
-            if name.is_absolute() or '..' in name.parts or '\\' in item.filename or ':' in item.filename or not name.parts or (item.external_attr>>16)&0o170000==0o120000:
+            # ZipInfo.filename normalizes backslashes on Windows; inspect the raw entry too.
+            raw=item.orig_filename
+            unsafe_part=any(part.rstrip(' .')!=part or any(ch in part for ch in '<>:"|?*') or part.split('.')[0].upper() in reserved for part in name.parts)
+            if name.is_absolute() or '..' in name.parts or '\\' in raw or unsafe_part or not name.parts or (item.external_attr>>16)&0o170000==0o120000:
                 raise RuntimeError('Unsafe model archive path.')
-            roots.add(name.parts[0])
+            canonical=str(name).casefold()
+            if canonical in seen:raise RuntimeError('Duplicate model archive path.')
+            seen.add(canonical);roots.add(name.parts[0])
         if len(roots)!=1:raise RuntimeError('Expected one model package folder.')
         folder=next(iter(roots));metadata=json.loads(source.read(folder+'/metadata.json'))
         from_code,to_code=pair.split('_')

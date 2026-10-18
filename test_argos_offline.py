@@ -93,7 +93,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_setup_refuses_unsafe_models_wrong_pair_and_running_owner(self):
         with tempfile.TemporaryDirectory() as target:
-            for name in ['../escape','/absolute','folder\\escape','C:/escape']:
+            for name in ['../escape','/absolute','folder\\escape','C:/escape','folder/.. /escape','folder/CON','folder/file.','folder/file:stream']:
                 with self.assertRaises(RuntimeError):setup.unpack_model(self.archive({name:'bad'}),target,'en_zh')
             wrong={'model/metadata.json':json.dumps({'from_code':'zh','to_code':'en','package_version':'1.9'}),'model/model/model.bin':'synthetic'}
             with self.assertRaises(RuntimeError):setup.unpack_model(self.archive(wrong),target,'en_zh')
