@@ -33,8 +33,36 @@ def sentencepiece_failure(error):
     return labels+['sp_reason='+reason]
 
 
+def input_kind(value):
+    kind=type(value)
+    if kind in (str,bytes,list,tuple,dict,type(None),bool,int,float):return kind.__name__
+    if kind.__module__=='numpy' and kind.__name__ in ('str_','bytes_','ndarray','int32','int64','float32','float64','bool_'):
+        return 'numpy_'+kind.__name__
+    return 'other'
+
+
+def input_shape(value,prefix):
+    # Never call repr/str on input or report arbitrary user-defined type names.
+    kind=type(value)
+    labels=[prefix+'_type='+input_kind(value)]
+    if kind in (str,bytes,list,tuple,dict):labels.append(prefix+'_length='+str(len(value)))
+    if kind in (str,bytes):
+        try:
+            if kind is str:value.encode('utf-8')
+            else:value.decode('utf-8')
+            encoding='valid'
+        except (UnicodeEncodeError,UnicodeDecodeError):encoding='invalid'
+        labels.append(prefix+'_utf8='+encoding)
+    if kind in (list,tuple):
+        for index,item in enumerate(value[:4]):
+            child=prefix+'_item'+str(index);item_kind=type(item)
+            labels.append(child+'_type='+input_kind(item))
+            if item_kind in (str,bytes,list,tuple,dict):labels.append(child+'_length='+str(len(item)))
+    return labels
+
+
 def safe_diagnostic(error):
-    """Code locations and error types only: never exception text, paths or locals."""
+    """Code locations, error categories and selected input shapes; never content."""
     details=[];seen=set()
     while error is not None and id(error) not in seen and len(seen)<3:
         seen.add(id(error))
@@ -52,6 +80,18 @@ def safe_diagnostic(error):
             module=tb.tb_frame.f_globals.get('__name__','')
             sentencepiece_frame=sentencepiece_frame or module=='sentencepiece' or module.startswith('sentencepiece.')
             function=tb.tb_frame.f_code.co_name
+            # Read only pinned-library argument names from the failing call.
+            # This observes the actual integrated path, not standalone probes.
+            values=tb.tb_frame.f_locals
+            if module=='argostranslate.translate' and function=='apply_packaged_translation' and 'sentences' in values:
+                details.extend(input_shape(values['sentences'],'sp_sentences'))
+            if module=='argostranslate.tokenizer' and function=='encode' and 'sentence' in values:
+                details.extend(input_shape(values['sentence'],'sp_sentence'))
+            if module=='sentencepiece' and function=='Encode':
+                if 'input' in values:details.extend(input_shape(values['input'],'sp_input'))
+                args=values.get('args')
+                if type(args) is list:
+                    details.append('sp_cpp_types='+'_'.join(input_kind(x) for x in args[:12]))
             if re.fullmatch(r'[A-Za-z_][A-Za-z_0-9.]{0,119}',module) and re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]{0,79}',function):
                 frames.append(module+'.'+function+':'+str(tb.tb_lineno))
             tb=tb.tb_next

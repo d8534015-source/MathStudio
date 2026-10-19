@@ -105,17 +105,25 @@ class RuntimeTests(unittest.TestCase):
     def test_real_minisbd_models_use_argos_supported_api_offline_repeatedly(self):
         import hashlib
         import onnxruntime
+        import sentencepiece as sp
+        from argostranslate.tokenizer import SentencePieceTokenizer
         onnxruntime.disable_telemetry_events()
         from types import SimpleNamespace
         with mock.patch.dict(os.environ,ar.environment(Path(self.temp.name))):
             from argostranslate import sbd,settings,translate
         self.assertEqual(settings.chunk_type,settings.ChunkType.MINISBD)
+        corpus=['We learn mathematics. We solve an equation.','我们学习数学。我们解一个方程。']
+        model=io.BytesIO()
+        sp.SentencePieceTrainer.train(sentence_iterator=iter(corpus*10),model_writer=model,
+            vocab_size=80,hard_vocab_limit=False,num_threads=1,minloglevel=2)
+        tokenizer_path=Path(self.temp.name)/'sentencepiece.model';tokenizer_path.write_bytes(model.getvalue())
         root=Path(os.environ['MATH_ARGOS_TEST_SBD_DIR']);profile=worker.profile()
         for pair,spec in profile['sentence_models'].items():
             data=(root/spec['filename']).read_bytes();self.assertEqual(hashlib.sha256(data).hexdigest(),spec['sha256'])
             folder=Path(self.temp.name)/pair;(folder/'minisbd').mkdir(parents=True)
             (folder/'minisbd'/spec['filename']).write_bytes(data)
-            pkg=SimpleNamespace(package_path=folder,from_code=pair.split('_')[0])
+            pkg=SimpleNamespace(package_path=folder,from_code=pair.split('_')[0],
+                                tokenizer=SentencePieceTokenizer(tokenizer_path),target_prefix='')
             engine=translate.PackageTranslation(None,None,pkg)
             detector=engine.sentencizer;self.assertIsInstance(detector,sbd.MiniSBDSentencizer)
             text='We learn mathematics. We solve an equation.' if pair=='en_zh' else '我们学习数学。我们解一个方程。'
@@ -123,6 +131,48 @@ class RuntimeTests(unittest.TestCase):
                 first=detector.split_sentences(text);second=detector.split_sentences(text)
             self.assertEqual(first,second);self.assertEqual(len(first),2)
             self.assertEqual(detector.detector.session.get_providers(),['CPUExecutionProvider'])
+            self.assertTrue(all(type(sentence) is str and sentence for sentence in first))
+            # Exercise the exact Argos hypotheses -> MiniSBD -> tokenizer call
+            # chain, stopping before unavailable CTranslate2 model inference.
+            class EncodingComplete(Exception):pass
+            native=mock.Mock();native.translate_batch.side_effect=EncodingComplete()
+            engine.translator=native
+            with mock.patch.object(pkg.tokenizer,'encode',wraps=pkg.tokenizer.encode) as encode,mock.patch('socket.create_connection',side_effect=AssertionError('No network')):
+                for _ in range(2):
+                    with self.assertRaises(EncodingComplete):engine.hypotheses(text,1)
+            self.assertEqual([call.args[0] for call in encode.call_args_list],first*2)
+            for call in native.translate_batch.call_args_list:
+                expected=[pkg.tokenizer.encode(sentence) for sentence in first]
+                self.assertEqual(call.args[0],expected)
+                self.assertTrue(all(type(token) is str for sentence in call.args[0] for token in sentence))
+
+    def test_integrated_sentencepiece_failure_reports_real_argument_shapes_only(self):
+        namespace={'__name__':'sentencepiece'}
+        exec('def Encode(input):\n args=[input,False,-1,0.1,False,False,False,False]\n raise RuntimeError("Unable to cast Python instance private-path private-student")',namespace)
+        tokenizer_namespace={'__name__':'argostranslate.tokenizer','native':namespace['Encode']}
+        exec('def encode(sentence):\n return native(sentence)',tokenizer_namespace)
+        translate_namespace={'__name__':'argostranslate.translate','encode':tokenizer_namespace['encode']}
+        exec('def apply_packaged_translation(sentences):\n return [encode(sentence) for sentence in sentences]',translate_namespace)
+        for value,expected in [('私密数学',('sp_input_type=str','sp_input_length=4','sp_input_utf8=valid')),
+                               (['private-student',b'private-path'],('sp_input_type=list','sp_input_item0_type=str','sp_input_item1_type=bytes')),
+                               ('\ud800',('sp_input_type=str','sp_input_utf8=invalid'))]:
+            try:translate_namespace['apply_packaged_translation']([value])
+            except RuntimeError as error:diagnostic=worker.safe_diagnostic(error)
+            else:self.fail('Native failure must propagate')
+            for label in ('sp_sentences_type=list','sp_sentence_type=', 'sp_reason=python_cpp_cast','sp_cpp_types=',*expected):
+                self.assertIn(label,diagnostic)
+            self.assertTrue(ar.worker_diagnostic(('ARGOS_DIAGNOSTIC '+diagnostic).encode('ascii')).startswith('exception=RuntimeError'))
+            for private in ['私密数学','private-student','private-path','Traceback']:self.assertNotIn(private,diagnostic)
+
+    def test_input_shape_bounds_containers_and_does_not_stringify_unknown_values(self):
+        class Secret:
+            def __str__(self):raise AssertionError('Do not stringify')
+            def __repr__(self):raise AssertionError('Do not repr')
+        labels=worker.input_shape([Secret(),['private'],{},b'private',Secret()],'sp_input')
+        result='; '.join(labels)
+        self.assertIn('sp_input_type=list',result);self.assertIn('sp_input_length=5',result)
+        self.assertIn('sp_input_item0_type=other',result);self.assertIn('sp_input_item1_type=list',result)
+        self.assertNotIn('private',result);self.assertNotIn('Secret',result);self.assertNotIn('item4',result)
 
     def test_process_scrubs_credentials_caps_threads_and_preserves_tokens(self):
         self.ready_files()
