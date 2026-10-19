@@ -1,0 +1,30 @@
+{
+  "artifact": "MathStudio_v41_6_6_OWNER_PR9_Review.zip",
+  "sha256": "0255c52dd7ad97bb9a599bd93e059cc783446ec892f3544c668a4fc1ac06c98c",
+  "bytes": 554338,
+  "zip_members": 114,
+  "source_allowlist_files": 113,
+  "source_commit": "6cd68121cede46bf900fc857194a43368a0e8f56",
+  "pr8_ancestor_verified": true,
+  "pr8_argos_source_byte_identity": [
+    "argos_worker.py",
+    "argos_runtime.py",
+    "argos_setup.py"
+  ],
+  "targeted_tests": {
+    "passed": 7,
+    "failed": 0
+  },
+  "checks": [
+    "ZIP CRC",
+    "exact allowlist and byte hashes",
+    "single versioned root",
+    "no forbidden data/binary/model payloads",
+    "required OWNER scripts/modules",
+    "all extracted Python sources compile",
+    "extracted backend imports/schema initialization/missing-model fallback"
+  ],
+  "windows_launcher_execution": "not executed in this Linux session",
+  "real_model_translation": "not executed; no official translation weights installed here; setup checks both directions on Windows using local copies",
+  "production_changes": "none; no deployment/merge/tunnel/EXE rebuild"
+}

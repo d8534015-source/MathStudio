@@ -716,6 +716,44 @@
         "owner"
       ],
       "sha256": "d4422898a49b8585ff922bbdeb00e62469128763d1bf3a7038d576c42d958e4d"
+    },
+    "owner_review.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "7a83260dcf0843d8f00600476007e9eb65994f8b8da6e213a2e3580e87007ebf"
+    },
+    "test_owner_review.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "4ec0ca81981ed60c960dd5892d1ec654b115d4cc20e5be2cf5560273d320ff49"
+    },
+    "REVIEW OWNER SETUP.bat": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "b31a9be71b74ccbb3c2f82561734daa65a23388f9c1d44dada44889341e63163"
+    },
+    "REVIEW OWNER START.bat": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "d7172bb5c1cd791b568ec0d1cc24ecfd285b783cd467e61ae3ae4dccba37ff38"
+    },
+    "REVIEW_OWNER_README.md": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "be28ef0317da95523468e6995f88979e999da51aaefe4b4a7ecec8156c3ad690"
     }
+  },
+  "owner_review": {
+    "source_commit": "6cd68121cede46bf900fc857194a43368a0e8f56",
+    "inherits_pr8": "cd09b99483abf1c2260bcf9c91183280df1b4f4b",
+    "instructions": "REVIEW_OWNER_README.md",
+    "launch_port": 5059,
+    "binding": "127.0.0.1",
+    "models": "Local copy of existing ready runtime/packages; not bundled or downloaded"
   }
 }
