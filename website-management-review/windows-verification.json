@@ -1,0 +1,20 @@
+{
+  "status": "passed",
+  "ci_run": 39200969026,
+  "artifact_id": 12163633879,
+  "artifact_zip_sha256": "28a61aa5235114cde9c89d603ae238f9a3083c05d42b0684d9d52476bbfea132",
+  "exe_sha256": "cb88d5022491570aec61c16ffb78175d02095486aa29038de657123373a066e0",
+  "exe_bytes": 16284377,
+  "source_head": "10b80c72a648532167ed163aeb76d3ea0bff40b3",
+  "ci_checkout": "f74bf97f349f04ed4a7f19ff276936d6a3ae81cb",
+  "same_owner_and_teacher_source_manifest": true,
+  "source_manifest_sha256": "9fbdcc40fdf096c708ddef633c5b134b5d5e151e54d75f959298275e0a0114fe",
+  "build": "v41.6.6-pr9-pairing-review1",
+  "pe_header": true,
+  "windows_smoke_checks": 15,
+  "dpapi_bundled_roundtrip": true,
+  "windows11_physical_tests": false,
+  "live_quick_tunnel_test": false,
+  "authenticode": "NotSigned",
+  "defender_scan": "completed, zero build detections"
+}

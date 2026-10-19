@@ -4,6 +4,7 @@ No account, message, file, private-class or booking source is accepted here.
 Provider calls run outside database transactions. Credentials never enter API output.
 """
 import argos_runtime
+import website_content
 import hashlib
 import json
 import os
@@ -22,6 +23,7 @@ class TranslationError(Exception):
 
 
 def initialize(c):
+    website_content.initialize(c)
     c.executescript('''
       CREATE TABLE IF NOT EXISTS public_translation_config(
         id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL DEFAULT 0,
@@ -40,17 +42,17 @@ def digest(text):
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
-def sources(c):
+def sources(c,public=False):
     result = {}
     for row in c.execute("SELECT key,value FROM settings WHERE key IN ('headline','intro','about')"):
         result['settings:0:' + row['key']] = row['value']
-    for row in c.execute('SELECT id,body FROM posts ORDER BY id DESC LIMIT 30'):
+    for row in c.execute('SELECT id,body FROM posts'+(' WHERE published=1 ORDER BY id DESC LIMIT 30' if public else ' ORDER BY id DESC')):
         result[f"posts:{row['id']}:body"] = row['body']
     for row in c.execute("SELECT id,description FROM lesson_types WHERE active=1"):
         result[f"courses:{row['id']}:description"] = row['description']
     for row in c.execute("SELECT id,description FROM classes WHERE class_kind='group' AND approval='confirmed' AND status='scheduled'"):
         result[f"groups:{row['id']}:description"] = row['description']
-    return result
+    return website_content.translation_sources(c,result,public)
 
 
 def config(c):
@@ -172,7 +174,7 @@ def check_protected(original, translated, terms):
 
 
 def public(c, language):
-    originals = sources(c)
+    originals = sources(c,public=True)
     if language not in ('en', 'zh'):
         raise TranslationError('Invalid translation language.')
     rows = c.execute('SELECT source_key,source_hash,approved FROM public_translations WHERE target=? AND approved IS NOT NULL', (language,))
@@ -184,7 +186,10 @@ def admin(c):
     originals = sources(c)
     rows = [dict(r) for r in c.execute('SELECT * FROM public_translations')
             if r['source_key'] in originals and digest(originals[r['source_key']]) == r['source_hash']]
-    return {'config': config(c), 'sources': [{'key': k, 'original': v, 'source_hash': digest(v)} for k, v in originals.items()], 'translations': rows}
+    previous=[dict(r) for r in c.execute('SELECT * FROM public_translations ORDER BY updated DESC')
+              if r['source_key'] in originals and digest(originals[r['source_key']])!=r['source_hash']]
+    return {'config': config(c), 'sources': [{'key': k, 'original': v, 'source_hash': digest(v)} for k, v in originals.items()],
+            'translations': rows,'previous_translations':previous}
 
 
 def action(db, data, legacy):
@@ -210,6 +215,8 @@ def action(db, data, legacy):
         conf = config(c)
         existing = c.execute('SELECT * FROM public_translations WHERE source_key=? AND target=? AND source_hash=?', (key, target, source_hash)).fetchone()
         if op == 'generate':
+            if data.get('offline_only') and conf['provider']!='argos':
+                raise TranslationError('OWNER offline translation is unavailable.',503)
             if not conf['enabled'] or not conf['configured']:
                 raise TranslationError('Public translation provider is disabled.', 503)
             if not original.strip():

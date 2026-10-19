@@ -1,0 +1,65 @@
+{
+  "artifact": "MathStudio_v41_6_6_OWNER_PR9_Review.zip",
+  "sha256": "1010fca831cff8bb7c1ee936a34d959746ee1c10f083edcbfd689c88b6292e8b",
+  "bytes": 574373,
+  "zip_members": 119,
+  "source_commit": "10b80c72a648532167ed163aeb76d3ea0bff40b3",
+  "build": "v41.6.6-pr9-pairing-review1",
+  "source_manifest_sha256": "9fbdcc40fdf096c708ddef633c5b134b5d5e151e54d75f959298275e0a0114fe",
+  "allowlisted_owner_files": 118,
+  "allowlisted_teacher_files": 27,
+  "checks": [
+    "ZIP CRC/exact source bytes/manifest",
+    "no private/model/environment/executable payloads",
+    "all extracted Python sources compile",
+    "isolated extracted schema startup without automatic account creation",
+    "missing-model fallback",
+    "PR8 Argos/media source byte identity"
+  ],
+  "local_regressions": {
+    "run": 185,
+    "passed": 183,
+    "skipped": 2,
+    "failed": 0,
+    "seconds": 29.556,
+    "skipped_reasons": [
+      "Windows DPAPI encryption/origin-profile isolation",
+      "Windows DPAPI authenticated restoration across new processes"
+    ]
+  },
+  "official_minisbd_sentence_models": "passed with existing official sentence models and synthetic tokenizer; full translation weights unavailable",
+  "browser_workflows": {
+    "passed": 15,
+    "failed": 0
+  },
+  "windows_ci": {
+    "run_id": 39200969026,
+    "url": "https://github.com/d8534015-source/MathStudio/actions/runs/39200969026",
+    "status": "success",
+    "os": "Windows Server 2025",
+    "python": "3.13.12 x64",
+    "run": 185,
+    "passed": 181,
+    "skipped": 4,
+    "failed": 0,
+    "seconds": 280.539,
+    "optional_skips": "Argos/SentencePiece/MiniSBD tests passed in local OWNER-stack run",
+    "actual_dpapi_encryption_and_process_restart": "passed",
+    "installer_smoke_checks": 15
+  },
+  "live_quick_tunnel": "unverified; official cloudflared not installed here and Cloud network restricts tunnel access",
+  "physical_windows11_mobile": "not executed",
+  "signed": false,
+  "production_changes": "none",
+  "installer": {
+    "filename": "MathStudio-Website-Management-Review.exe",
+    "sha256": "cb88d5022491570aec61c16ffb78175d02095486aa29038de657123373a066e0",
+    "bytes": 16284377,
+    "source_head": "10b80c72a648532167ed163aeb76d3ea0bff40b3",
+    "ci_checkout": "f74bf97f349f04ed4a7f19ff276936d6a3ae81cb",
+    "source_manifest_sha256": "9fbdcc40fdf096c708ddef633c5b134b5d5e151e54d75f959298275e0a0114fe",
+    "authenticode": "NotSigned",
+    "defender": "scan_completed",
+    "threats_in_build": 0
+  }
+}

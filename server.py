@@ -2,6 +2,7 @@
 Run: py server.py | py server.py add-admin | py server.py reset-password
 """
 import public_translations
+import website_content
 import contextlib
 import getpass
 import hashlib
@@ -276,6 +277,8 @@ def init():
         CREATE INDEX IF NOT EXISTS instant_meetings_class_idx ON instant_meetings(class_id);
         ''')
         public_translations.initialize(c)
+        import owner_auth
+        owner_auth.schema(c)
         # Additive booking migration. Existing fixed classes remain confirmed appointments.
         columns={r['name'] for r in c.execute('PRAGMA table_info(classes)')}
         for name,sql in (
@@ -609,6 +612,9 @@ def validate_token_user(item,c,cl,admin=False):
     need(user and user['id']==item['uid'] and user['role']==item['role']
          and hmac.compare_digest(credential_version(user),item.get('credential_version','')),
          'Teacher or annotation authorization expired. Sign in again.',403)
+    if session.get('remember_id'):
+        import owner_auth
+        need(owner_auth.session_valid(c,session['remember_id'],user),'Teacher or annotation authorization expired. Sign in again.',403)
     if admin: need(user['role']=='admin','Admin access required.',403)
     if user['role']!='admin':
         access=session.get('instant_access',{}).get(str(cl['id']),{})
@@ -883,6 +889,11 @@ class Handler(BaseHTTPRequestHandler):
                 SESSIONS[self.sid]=self.session
         with db() as c:
             self.user=c.execute('SELECT * FROM users WHERE id=?',(self.session.get('user'),)).fetchone() if self.session.get('user') else None
+            if self.session.get('remember_id'):
+                import owner_auth
+                if not owner_auth.session_valid(c,self.session['remember_id'],self.user):
+                    self.rotate(None)
+                    self.user=None
         if self.user is None and isinstance(self.session.get('guest_identity'),dict):
             guest=self.session['guest_identity']
             self.user={'id':guest.get('id'),'username':'guest','name':guest.get('name','Guest'),'role':'guest'}
@@ -1107,6 +1118,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def get_api(self):
         path=self.path_only
+        if path=='/api/desktop/setup-status':
+            import owner_auth
+            limit_requests([('setup-status:'+self.client_ip(),60,60),('setup-status-global',600,60)],'Too many attempts. Try again later.')
+            with db() as c:return {'initialized':owner_auth.initialized(c)}
         if path=='/api/desktop-info': return {'build':BUILD_ID,'port':PORT,'public_origin':current_public_origin(),'lan_origin':f'http://{self.server.server_address[0] if self.server.server_address[0] not in ("0.0.0.0","::") else "127.0.0.1"}:{PORT}','cloudflare_turn_configured':bool(os.environ.get('CLOUDFLARE_TURN_KEY_ID','').strip() and os.environ.get('CLOUDFLARE_TURN_API_TOKEN','').strip())}
         if path=='/api/me': return {'user':public_user(self.user),'csrf':self.session['csrf']}
         if path=='/api/content-translations':
@@ -1116,10 +1131,16 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/admin/content-translations':
             self.require_user(True)
             with db() as c: return public_translations.admin(c)
+        if path=='/api/admin/website-content':
+            self.require_user(True)
+            with db() as c:return website_content.state(c)
         if path=='/api/public':
             with db() as c:
                 settings={r['key']:r['value'] for r in c.execute('SELECT * FROM settings') if r['key'] in DEFAULTS}
-                posts=[dict(r) for r in c.execute('SELECT * FROM posts ORDER BY id DESC LIMIT 30')]
+                shown=website_content.visibility(c)
+                for key in website_content.SETTINGS:
+                    if not shown.get('settings:0:'+key,True):settings[key]=''
+                posts=[dict(r) for r in c.execute('SELECT * FROM posts WHERE published=1 ORDER BY id DESC LIMIT 30')]
                 translations={lang:public_translations.public(c,lang)['translations'] for lang in ('en','zh')}
             try: rules=timezone_rules(settings['timezone'],datetime.now(timezone.utc).year)
             except TimezoneDataError as ex: raise APIError(str(ex),503)
@@ -1137,6 +1158,7 @@ class Handler(BaseHTTPRequestHandler):
             return {'code':code,'class_id':item['class_id'],'title':item['title'],'live':True}
         if path=='/api/classes':
             with db() as c:
+                shown=website_content.visibility(c)
                 rows=c.execute('''SELECT classes.*, (SELECT count(*) FROM bookings b WHERE b.class_id=classes.id) AS booked,
                   EXISTS(SELECT 1 FROM bookings b WHERE b.class_id=classes.id AND b.user_id=?) AS mine,
                   COALESCE(classes.group_price_label,lesson_types.price_label,'') AS price_label
@@ -1157,6 +1179,7 @@ class Handler(BaseHTTPRequestHandler):
                           and access.get('expires',0)>now)
                 if not (row['mine'] or public_group or admitted): continue
                 item={key:row[key] for key in fields}
+                if row['class_kind']=='group' and not shown.get(f"groups:{row['id']}:description",True):item['description']=''
                 if row['mine']: item['group_chat_id']=row['group_chat_id']
                 visible.append(item)
             return {'classes':visible}
@@ -1164,6 +1187,9 @@ class Handler(BaseHTTPRequestHandler):
             now=time.time(); horizon=now+70*86400
             with db() as c:
                 lessons=[dict(r) for r in c.execute("SELECT * FROM lesson_types WHERE active=1 ORDER BY name,minutes")]
+                shown=website_content.visibility(c)
+                for lesson in lessons:
+                    if not shown.get(f"courses:{lesson['id']}:description",True):lesson['description']=''
                 availability=[dict(r) for r in c.execute("SELECT * FROM availability WHERE status='open' AND end>? AND start<? ORDER BY start",(now,horizon))]
                 busy=[dict(r) for r in c.execute("SELECT id,start,minutes,approval,status FROM classes WHERE status='scheduled' AND approval IN ('pending','confirmed') AND start<? AND start+minutes*60>? ORDER BY start",(horizon,now))]
             return {'lesson_types':lessons,'availability':availability,'busy':busy}
@@ -1334,10 +1360,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send(frame,mime='image/jpeg'); return None
         if path.startswith('/api/'): raise APIError('Not found.',404)
         if path=='/admin': self.send_redirect('/teacher'); return None
+        if path=='/teacher/translations':self.send_redirect('/teacher');return None
         if path=='/build_info.js':
             self.send(('export const BUILD_ID='+json.dumps(BUILD_ID)+'; export const ASSET_VERSION='+json.dumps(ASSET_VERSION)+';').encode(),mime='text/javascript; charset=utf-8');return None
-        files={'/teacher':'teacher.html','/teacher_page.js':'teacher_page.js','/':'index.html' ,'/app.js':'app.js','/web_i18n.js':'web_i18n.js','/locales.js':'locales.js','/public_content.js':'public_content.js','/translation_manager.js':'translation_manager.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
-        if path not in files and path in ('/booking','/login','/signup','/account','/classroom','/resources','/messages','/join','/teacher/translations'): path='/'
+        files={'/teacher':'teacher.html','/teacher_page.js':'teacher_page.js','/':'index.html' ,'/app.js':'app.js','/web_i18n.js':'web_i18n.js','/locales.js':'locales.js','/public_content.js':'public_content.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
+        if path not in files and path in ('/booking','/login','/signup','/account','/classroom','/resources','/messages','/join'): path='/'
         need(path in files,'Page not found.',404)
         f=ROOT/files[path]; mime=mimetypes.guess_type(f.name)[0] or 'application/octet-stream'
         if f.suffix=='.js': mime='text/javascript'
@@ -1348,6 +1375,74 @@ class Handler(BaseHTTPRequestHandler):
 
     def post_api(self,d):
         path=self.path_only
+        if path=='/api/desktop/setup':
+            import owner_auth
+            limit_requests([('pairing:'+self.client_ip(),5,900),('pairing-global',30,900)],'Too many setup attempts. Wait fifteen minutes.')
+            code=d.get('pairing','')
+            need(owner_auth.PAIRING is not None and owner_auth.PAIRING.valid(code),'Pairing authorization is invalid or expired.',403)
+            username=field(d,'username',3,40).lower()
+            need(re.fullmatch(r'[a-z0-9_]{3,40}',username),'Username: use letters, numbers, and underscores.')
+            name=field(d,'name',1,80)
+            password=d.get('password')
+            need(isinstance(password,str) and 12<=len(password)<=256,'Use 12–256 characters.')
+            hashed=hash_password(password)
+            with LOCK:
+                with db() as c:
+                    c.execute('BEGIN IMMEDIATE')
+                    need(not owner_auth.initialized(c),'OWNER is already initialized.',409)
+                    need(owner_auth.PAIRING.valid(code),'Pairing authorization is invalid or expired.',403)
+                    try:r=c.execute("INSERT INTO users(username,name,password,role) VALUES (?,?,?,'admin')",(username,name,hashed))
+                    except sqlite3.IntegrityError:raise APIError('That username is already in use.',409)
+                    uid=r.lastrowid
+                    c.execute("INSERT OR REPLACE INTO settings VALUES ('owner_initialized','1')")
+                owner_auth.PAIRING.consume()
+                self.rotate(uid)
+            with db() as c:u=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
+            return {'user':public_user(u),'csrf':self.session['csrf']}
+        if path=='/api/desktop/remember':
+            import owner_auth
+            self.require_user(admin=True)
+            self.limit_auth(self.user['username'])
+            password=d.get('password','')
+            need(isinstance(password,str) and len(password)<=256 and check_password(self.user['password'],password),'Re-enter your password to remember this device.',401)
+            device=field(d,'device',64,64)
+            need(re.fullmatch('[0-9a-f]{64}',device),'Invalid device credential.')
+            with db() as c:
+                c.execute('BEGIN IMMEDIATE')
+                try:token=owner_auth.issue(c,self.user,device)
+                except ValueError as error:raise APIError(str(error),409)
+                old=self.session.get('remember_id')
+                if old:c.execute('DELETE FROM desktop_credentials WHERE selector=?',(old,))
+            self.session['remember_id']=token.split('.')[0]
+            return {'refresh':token,'csrf':self.session['csrf']}
+        if path=='/api/desktop/refresh':
+            import owner_auth
+            limit_requests([('refresh:'+self.client_ip(),30,300),('refresh-global',600,300)],'Too many attempts. Wait five minutes.')
+            token=field(d,'refresh',50,150);device=field(d,'device',64,64)
+            with LOCK:
+                with db() as c:
+                    c.execute('BEGIN IMMEDIATE')
+                    result=owner_auth.rotate(c,token,device)
+                need(result,'Remembered login expired or was revoked. Sign in again.',401)
+                user,token=result
+                selector=token.split('.')[0]
+                for sid in list(SESSIONS):
+                    if SESSIONS[sid].get('remember_id')==selector:
+                        SESSIONS.pop(sid,None);revoke_tokens(session=sid)
+                self.rotate(user['id'])
+                self.session['remember_id']=selector
+            return {'user':public_user(user),'csrf':self.session['csrf'],'refresh':token}
+        if path=='/api/desktop/forget':
+            self.require_user(admin=True)
+            selected=d.get('refresh','')
+            need(isinstance(selected,str) and len(selected)<=150,'Invalid device credential.')
+            selector=selected.split('.')[0] if selected else self.session.get('remember_id','')
+            with db() as c:c.execute('DELETE FROM desktop_credentials WHERE selector IN (?,?) AND user_id=?',
+                                    (selector,self.session.get('remember_id',''),self.user['id']))
+            # Forget future restoration without interrupting this ordinary
+            # authenticated session or its active native classroom tokens.
+            self.session.pop('remember_id',None)
+            return {'ok':True,'csrf':self.session['csrf']}
         if path=='/api/instant/join':
             self.limit_meeting_code()
             code=re.sub(r'\D','',str(d.get('code','')))
@@ -1390,6 +1485,8 @@ class Handler(BaseHTTPRequestHandler):
                 u=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
             return {'user':public_user(u),'csrf':self.session['csrf']}
         if path=='/api/logout':
+            if self.session.get('remember_id'):
+                with db() as c:c.execute('DELETE FROM desktop_credentials WHERE selector=?',(self.session['remember_id'],))
             with LOCK:
                 for room in ROOMS.values():
                     for key in list(room['peers']):
@@ -1489,6 +1586,10 @@ class Handler(BaseHTTPRequestHandler):
             return {'ok':True}
         if path.startswith('/api/admin/'):
             self.require_user(True)
+            if path=='/api/admin/website-content':
+                try:
+                    with db() as c:return website_content.action(c,d,self.user['name'])
+                except website_content.ContentError as ex:raise APIError(ex.message,ex.status)
             if path=='/api/admin/content-translations':
                 try: return public_translations.action(db,d,_translate_online)
                 except public_translations.TranslationError as ex: raise APIError(ex.message,ex.status)
@@ -1882,18 +1983,24 @@ def main():
     if sys.argv[1:]==['add-admin']: return cli_account()
     if sys.argv[1:]==['reset-password']: return cli_account(True)
     if sys.argv[1:]: raise SystemExit('Usage: py server.py [add-admin|reset-password]')
-    with db() as c: missing=not c.execute("SELECT 1 FROM users WHERE role='admin'").fetchone()
-    if missing:
-        if os.environ.get('MATH_DESKTOP_MODE')=='1':
-            raise SystemExit('No teacher account exists. Run OPEN MATHSTUDIO TEACHER.bat to create one.')
-        print('Create the first teacher/admin account:'); cli_account()
+    import owner_auth
+    with db() as c: missing=not owner_auth.initialized(c)
     try: server=ThreadingHTTPServer((BIND,PORT),Handler)
     except OSError as ex: raise SystemExit(f'Could not open port {PORT}: {ex}. Stop the program already using that port first.')
+    pairing=None
+    try:
+        if missing:
+            owner_auth.PAIRING=owner_auth.Pairing()
+            pairing=owner_auth.pairing_window(owner_auth.PAIRING.code)
+            print('First-time Teacher Setup: enter the one-time authorization from the local OWNER pairing window in MathStudio Teacher. It expires in 15 minutes.',flush=True)
+    except BaseException:
+        owner_auth.PAIRING=None;server.server_close();raise
     # A failed duplicate launch must not mutate the running server's classes.
     try:
         with db() as c: c.execute('UPDATE classes SET live=0')
     except Exception:
-        server.server_close(); raise
+        if pairing:pairing.close()
+        owner_auth.PAIRING=None;server.server_close(); raise
     # Show both the same-computer address and a best-effort LAN address so
     # phones/tablets/other computers on the same network know what to open.
     lan_ip = None
@@ -1915,6 +2022,9 @@ def main():
     print('Leave this terminal open. Ctrl+C stops the server.')
     try: server.serve_forever()
     except KeyboardInterrupt: print('\nStopped.')
-    finally: server.server_close()
+    finally:
+        server.server_close()
+        if pairing:pairing.close()
+        owner_auth.PAIRING=None
 
 if __name__=='__main__': main()

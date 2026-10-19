@@ -15,6 +15,9 @@ import urllib.parse
 import urllib.request
 import webbrowser
 import http.cookiejar
+import queue
+from functools import partial
+import desktop_credentials
 from datetime import datetime, timedelta
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
@@ -114,7 +117,7 @@ class APIClient:
             self.csrf = out['csrf']
         return out
 
-    def login(self, username, password):
+    def login(self, username, password, remember=False):
         out = self.json('/api/login', {'username': username, 'password': password})
         self.user = out.get('user')
         self.csrf = out.get('csrf', self.csrf)
@@ -125,7 +128,53 @@ class APIClient:
                 pass
             self.user = None
             raise APIError('This account is not an admin/teacher account.')
+        self.forget_remembered()
+        if remember:self.enable_remember(password)
         return self.user
+
+    def enable_remember(self,password):
+        device=desktop_credentials.new_device()
+        out=self.json('/api/desktop/remember',{'password':password,'device':device})
+        try:desktop_credentials.save(self.base,out['refresh'],device)
+        except Exception:
+            self.json('/api/desktop/forget',{})
+            raise APIError('Windows could not save Remember Me. Sign in without it.') from None
+
+    def forget_remembered(self):
+        try:stored=desktop_credentials.load(self.base)
+        except Exception:stored=None
+        self.json('/api/desktop/forget',{'refresh':stored['refresh']} if stored else {})
+        desktop_credentials.forget(self.base)
+
+    def startup_auth(self):
+        try:stored=desktop_credentials.load(self.base)
+        except Exception:
+            desktop_credentials.forget(self.base);stored=None
+        if stored:
+            try:
+                out=self.json('/api/desktop/refresh',{'refresh':stored['refresh'],'device':stored['device']})
+                self.user=out.get('user')
+                if not self.user or self.user.get('role')!='admin':raise APIError('Remembered login was revoked. Sign in again.')
+                desktop_credentials.save(self.base,out['refresh'],stored['device'])
+                return 'authenticated'
+            except Exception:
+                # A failed rotation is never treated as a restored session.
+                try:self.json('/api/logout',{})
+                except Exception:pass
+                desktop_credentials.forget(self.base);self.user=None
+        return 'login' if self.json('/api/desktop/setup-status')['initialized'] else 'setup'
+
+    def setup_teacher(self,username,name,password,pairing,remember=False):
+        out=self.json('/api/desktop/setup',{'username':username,'name':name,'password':password,'pairing':pairing})
+        self.user=out.get('user')
+        if not self.user or self.user.get('role')!='admin':raise APIError('Teacher setup did not complete.')
+        if remember:self.enable_remember(password)
+        return self.user
+
+    def logout(self):
+        self.json('/api/logout',{})
+        desktop_credentials.forget(self.base)
+        self.jar.clear();self.user=None;self.csrf=''
 
     def me(self):
         out = self.json('/api/me')
@@ -481,10 +530,9 @@ class TeacherDesktopApp:
                 check_connection(self.client.base)
             except Exception as ex:
                 self.show_server_offline(str(ex));return
-            self.show_login();return
+            self.open_auth();return
         if not can_connect():
             try:
-                if not ensure_admin_account(self.root):return
                 self.server_process=start_server_process()
             except Exception as ex:
                 self.show_server_offline(str(ex));return
@@ -494,7 +542,64 @@ class TeacherDesktopApp:
                 'Port 5051 is running a different MathStudio build. Stop that server and start the v41.6.6 student website.'
             )
             return
-        self.show_login()
+        self.open_auth()
+
+    def auth_task(self,operation,success,failure):
+        """Only plain API calls run on the worker; every Tk callback stays here."""
+        if getattr(self,'_auth_busy',False):return
+        self._auth_busy=True
+        client=self.client;results=queue.Queue()
+        def work():
+            try:results.put((True,operation()))
+            except Exception as error:results.put((False,str(error)))
+        threading.Thread(target=work,daemon=True).start()
+        def poll():
+            try:ok,value=results.get_nowait()
+            except queue.Empty:
+                self.root.after(75,poll);return
+            self._auth_busy=False
+            if self.client is not client:return
+            (success if ok else failure)(value)
+        self.root.after(75,poll)
+
+    def open_auth(self):
+        def ready(mode):
+            if mode=='authenticated':self.build_main();self.refresh_all()
+            elif mode=='setup':self.show_setup()
+            else:self.show_login()
+        self.auth_task(self.client.startup_auth,ready,lambda error:self.show_server_offline(error))
+
+    def show_setup(self,values=None,remember_choice=False):
+        if getattr(self,'_auth_busy',False):return
+        self.current_page=''
+        for widget in self.root.winfo_children():widget.destroy()
+        shell=ttk.Frame(self.root,padding=20);shell.pack(expand=True)
+        ttk.Label(shell,text=self.tr('First-Time Teacher Setup'),font=('Segoe UI',20,'bold')).pack(anchor='w')
+        ttk.Label(shell,text=self.tr('Enter the one-time authorization from the local OWNER pairing window.'),wraplength=470).pack(anchor='w',pady=8)
+        entries={}
+        for key,label in [('username','Username'),('name','Teacher name'),('password','Password'),('confirm','Repeat password'),('pairing','OWNER pairing code')]:
+            ttk.Label(shell,text=self.tr(label)).pack(anchor='w')
+            entry=ttk.Entry(shell,width=46,show='•' if key in ('password','confirm','pairing') else '')
+            entry.pack(fill='x',pady=(1,5));entries[key]=entry
+            if values:entry.insert(0,values.get(key,''))
+        remember=tk.BooleanVar(value=remember_choice)
+        ttk.Checkbutton(shell,text=self.tr('Remember me on this device'),variable=remember,state='normal' if desktop_credentials.available() else 'disabled').pack(anchor='w')
+        status=ttk.Label(shell,text='',wraplength=470);status.pack(anchor='w',pady=5)
+        def submit():
+            password=entries['password'].get()
+            if password!=entries['confirm'].get():status.configure(text=self.tr('Passwords did not match.'));return
+            status.configure(text=self.tr('Connecting…'))
+            operation=partial(self.client.setup_teacher,entries['username'].get().strip(),entries['name'].get().strip(),password,entries['pairing'].get().strip(),remember.get())
+            def done(_):self.build_main();self.refresh_all()
+            self.auth_task(operation,done,lambda error:status.configure(text=self.tr(error)))
+        ttk.Button(shell,text=self.tr('Create teacher account'),command=submit).pack(fill='x',pady=4)
+        ttk.Button(shell,text=self.tr('Sign in instead'),command=self.show_login).pack(fill='x')
+        def switch():
+            if getattr(self,'_auth_busy',False):return
+            saved={key:entry.get() for key,entry in entries.items()};choice=remember.get()
+            self.lang='en' if self.lang=='zh' else 'zh';save_language(self.lang)
+            self.show_setup(saved,choice)
+        ttk.Button(shell,text='中文 / EN',command=switch).pack(fill='x',pady=4)
 
     def show_server_offline(self, detail='The student website server is not running.'):
         for w in self.root.winfo_children():
@@ -527,6 +632,8 @@ class TeacherDesktopApp:
         self.show_login()
 
     def show_login(self):
+        if getattr(self,'_auth_busy',False):return
+        self.current_page=''
         for w in self.root.winfo_children():
             w.destroy()
         shell = tk.Frame(self.root, bg='#f2f5f7')
@@ -556,16 +663,17 @@ class TeacherDesktopApp:
         tk.Label(card, text='Password', bg='white', fg='#354b54', font=('Segoe UI', 9, 'bold')).pack(anchor='w')
         pw = ttk.Entry(card, show='•')
         pw.pack(fill='x', pady=(6, 12), ipady=4)
+        remember=tk.BooleanVar(value=False)
+        ttk.Checkbutton(card,text='Remember me on this device',variable=remember,
+                        state='normal' if desktop_credentials.available() else 'disabled').pack(anchor='w',pady=(0,8))
         status = tk.Label(card, text='', bg='white', fg='#b42318', font=('Segoe UI', 9), wraplength=350, justify='left')
         status.pack(anchor='w', pady=(0, 8))
 
         def login(*_):
-            try:
-                self.client.login(user.get().strip(), pw.get())
-                self.build_main()
-                self.refresh_all()
-            except Exception as ex:
-                status.config(text=str(ex))
+            status.config(text=self.tr('Connecting…'))
+            operation=partial(self.client.login,user.get().strip(),pw.get(),remember.get())
+            def done(_):self.build_main();self.refresh_all()
+            self.auth_task(operation,done,lambda error:status.config(text=self.tr(error)))
         if self.remote:
             ttk.Button(card,text=self.tr('Change OWNER server'),command=self.change_owner_server).pack(fill='x',pady=6)
         ttk.Button(card, text='Sign in to Teacher', style='Accent.TButton', command=login).pack(fill='x', ipady=3, pady=(2,0))
@@ -597,7 +705,7 @@ class TeacherDesktopApp:
         items = [
             ('dashboard', '⌂', 'Dashboard'), ('schedule', '▦', 'Schedule'), ('bookings', '✓', 'Bookings'),
             ('students', '◎', 'Students'), ('groups', '◫', 'Groups & chats'), ('files', '⇩', 'Files & codes'),
-            ('meetings', '◉', 'Meetings'), ('settings', '⚙', 'Student site')
+            ('meetings', '◉', 'Meetings'), ('website', '▤', 'Website Management'), ('settings', '⚙', 'Connection & studio')
         ]
         for key, icon, label in items:
             b = tk.Button(side, text=f'  {icon}   {label}', anchor='w', relief='flat', bd=0, padx=14, pady=11,
@@ -740,9 +848,12 @@ class TeacherDesktopApp:
         return translated
 
     def toggle_language(self):
+        if getattr(self,'_auth_busy',False):return
         self.lang = 'zh' if self.lang == 'en' else 'en'
         save_language(self.lang)
-        if self.current_page:
+        if self.current_page=='website' and getattr(self,'website_editor',None) and self.website_editor.winfo_exists():
+            self.website_editor.set_language()
+        elif self.current_page:
             self.show_page(self.current_page)
         self.apply_language(self.root)
         if hasattr(self, 'lang_button') and self.lang_button.winfo_exists():
@@ -842,6 +953,9 @@ class TeacherDesktopApp:
             self.message_poll_job = None
 
     def show_page(self, key):
+        editor=getattr(self,'website_editor',None)
+        if getattr(self,'current_page','')=='website' and editor and editor.winfo_exists() and editor.dirty:
+            if not messagebox.askyesno(APP_TITLE,self.tr('Discard unsaved editor changes?'),parent=self.root):return
         self.current_page = key
         self.clear_content()
         meta = {
@@ -852,7 +966,8 @@ class TeacherDesktopApp:
             'groups':('Groups & chats','Persistent class conversations and lesson messages'),
             'files':('Files & access codes','Upload resources and create student download codes'),
             'meetings':('Meetings','Start the native teacher classroom and annotation tools'),
-            'settings':('Student site','Public website details and announcements')
+            'website':('Website Management','Draft, review and publish student-facing content'),
+            'settings':('Connection & studio','OWNER server connection and studio timezone')
         }
         title, subtitle = meta[key]
         self.page_title._mathstudio_en_text = title
@@ -880,7 +995,8 @@ class TeacherDesktopApp:
             self.classes = self.client.json('/api/classes').get('classes', [])
             self.status_label.config(text='● Connected · ' + datetime.now().strftime('%I:%M %p'), bg='#edf7f4', fg='#0f766e')
             self.apply_language(self.status_label)
-            self.show_page(self.current_page or 'dashboard')
+            if self.current_page=='website' and getattr(self,'website_editor',None) and self.website_editor.winfo_exists():self.website_editor.reload()
+            else:self.show_page(self.current_page or 'dashboard')
         except Exception as ex:
             self.status_label.config(text='● Connection problem', bg='#fff0f0', fg='#a52b37')
             self.apply_language(self.status_label)
@@ -1527,6 +1643,11 @@ class TeacherDesktopApp:
         except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
 
     # ----- Settings -----
+    def page_website(self):
+        from teacher_website import WebsiteManagement
+        self.website_editor=WebsiteManagement(self.content,self.client,self.tr,self.show_page)
+        self.website_editor.pack(fill='both',expand=True)
+
     def page_settings(self):
         if getattr(self,'remote',False):
             connection=ttk.Frame(self.content,style='Card.TFrame',padding=12)
@@ -1534,36 +1655,33 @@ class TeacherDesktopApp:
             ttk.Label(connection,text='OWNER server connection',style='Card.TLabel').pack(side='left')
             content_label(ttk.Label,connection,text=self.client.base,style='Card.TLabel').pack(side='left',padx=12)
             ttk.Button(connection,text='Change OWNER server',command=self.change_owner_server).pack(side='right')
-        settings=self.public.get('settings',{})
-        wrap=ttk.Frame(self.content);wrap.pack(fill='both',expand=True);wrap.columnconfigure(0,weight=1);wrap.columnconfigure(1,weight=1)
-        site=ttk.Frame(wrap,style='Card.TFrame',padding=16);site.grid(row=0,column=0,sticky='nsew',padx=(0,8))
-        post=ttk.Frame(wrap,style='Card.TFrame',padding=16);post.grid(row=0,column=1,sticky='nsew',padx=(8,0))
-        ttk.Label(site,text='Student website details',style='Card.TLabel',font=('Segoe UI',12,'bold')).pack(anchor='w')
-        fields={}
-        for key,label in [('name','Studio name'),('headline','Headline'),('teacher','Teacher name'),('contact','Contact')]:
-            ttk.Label(site,text=label,style='Card.TLabel').pack(anchor='w',pady=(8,2));v=tk.StringVar(value=settings.get(key,''));ttk.Entry(site,textvariable=v).pack(fill='x');fields[key]=v
-        ttk.Label(site,text='Introduction',style='Card.TLabel').pack(anchor='w',pady=(8,2));intro=tk.Text(site,height=5,wrap='word');intro.pack(fill='x');intro.insert('1.0',settings.get('intro',''))
-        ttk.Label(site,text='About teacher',style='Card.TLabel').pack(anchor='w',pady=(8,2));about=tk.Text(site,height=5,wrap='word');about.pack(fill='x');about.insert('1.0',settings.get('about',''))
-        timezone=tk.StringVar(value=settings.get('timezone','America/Edmonton'));ttk.Label(site,text='Timezone',style='Card.TLabel').pack(anchor='w',pady=(8,2));ttk.Combobox(site,textvariable=timezone,values=['America/Edmonton','America/Vancouver','America/Toronto','UTC'],state='readonly').pack(fill='x')
+        timezone=tk.StringVar(value=self.public.get('settings',{}).get('timezone','America/Edmonton'))
+        ttk.Label(self.content,text=self.tr('Timezone')).pack(anchor='w',pady=(8,2))
+        ttk.Combobox(self.content,textvariable=timezone,values=['America/Edmonton','America/Vancouver','America/Toronto','UTC'],state='readonly').pack(anchor='w')
         def save():
             try:
-                payload={k:v.get() for k,v in fields.items()};payload['intro']=intro.get('1.0','end').strip();payload['about']=about.get('1.0','end').strip();payload['timezone']=timezone.get();self.client.json('/api/admin/settings',payload);self.refresh_all();messagebox.showinfo(APP_TITLE,self.tr('Student website settings saved.'),parent=self.root)
-            except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
-        ttk.Button(site,text='Save website settings',command=save).pack(anchor='e',pady=(12,0))
-        ttk.Label(post,text='Publish announcement',style='Card.TLabel',font=('Segoe UI',12,'bold')).pack(anchor='w')
-        ttk.Label(post,text='Announcements appear on the student home page.',style='Card.TLabel',foreground='#66767d').pack(anchor='w',pady=(2,8))
-        title=tk.StringVar();ttk.Label(post,text='Title',style='Card.TLabel').pack(anchor='w');ttk.Entry(post,textvariable=title).pack(fill='x',pady=(2,8));ttk.Label(post,text='Message',style='Card.TLabel').pack(anchor='w');body=tk.Text(post,height=13,wrap='word');body.pack(fill='both',expand=True,pady=(2,8))
-        def publish():
-            try:self.client.json('/api/admin/post',{'title':title.get().strip(),'body':body.get('1.0','end').strip()});title.set('');body.delete('1.0','end');messagebox.showinfo(APP_TITLE,self.tr('Announcement published.'),parent=self.root)
-            except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
-        ttk.Button(post,text='Publish',command=publish).pack(anchor='e')
+                self.client.json('/api/admin/settings',{'timezone':timezone.get()});self.refresh_all()
+            except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+'\n\n'+str(ex),parent=self.root)
+        ttk.Button(self.content,text=self.tr('Save studio timezone'),command=save).pack(anchor='w',pady=12)
+        ttk.Button(self.content,text=self.tr('Website Management'),command=lambda:self.show_page('website')).pack(anchor='w')
+        ttk.Button(self.content,text=self.tr('Disable Remember Me on this device'),command=self.disable_remember).pack(anchor='w',pady=8)
+
+    def disable_remember(self):
+        self.auth_task(self.client.forget_remembered,
+                       lambda _:messagebox.showinfo(APP_TITLE,self.tr('Remember Me disabled. Your next app restart will require login.'),parent=self.root),
+                       lambda error:messagebox.showerror(APP_TITLE,self.tr(error),parent=self.root))
 
     def change_owner_server(self):
+        if getattr(self,'_auth_busy',False):return
         if not messagebox.askyesno(APP_TITLE,self.tr('Change OWNER server? Finish active lessons first. This signs you out of the dashboard.'),parent=self.root):return
+        try:self.client.logout()
+        except Exception:
+            # A changed Quick Tunnel address must remain recoverable offline.
+            desktop_credentials.forget(self.client.base)
+            self.client.jar.clear();self.client.user=None;self.client.csrf=''
+            messagebox.showwarning(APP_TITLE,self.tr('Previous OWNER is unreachable. Local Remember Me was cleared; remote logout is unconfirmed. Reset the OWNER password to revoke old devices if needed.'),parent=self.root)
         origin=select_origin(force=True)
-        if not origin or origin==self.client.base:return
-        try:self.client.json('/api/logout',{},timeout=3)
-        except Exception:pass
+        if not origin or origin==self.client.base:self.show_login();return
         for name in ('message_poll_job','_active_poll_job'):
             job=getattr(self,name,None)
             if job:
@@ -1578,9 +1696,15 @@ class TeacherDesktopApp:
         self._bootstrap()
 
     def sign_out(self):
-        try:self.client.json('/api/logout',{})
-        except Exception:pass
-        self.show_login()
+        def done(_):
+            for name in ('message_poll_job','_active_poll_job'):
+                job=getattr(self,name,None)
+                if job:
+                    try:self.root.after_cancel(job)
+                    except Exception:pass
+                    setattr(self,name,None)
+            self.show_login()
+        self.auth_task(self.client.logout,done,lambda error:messagebox.showerror(APP_TITLE,self.tr('Could not confirm logout. Check your connection and retry.'),parent=self.root))
     def on_close(self):
         if messagebox.askokcancel(self.tr('Exit MathStudio Teacher'),self.tr('Close the Teacher App? The student website will keep running separately.'),parent=self.root):
             self.root.destroy()

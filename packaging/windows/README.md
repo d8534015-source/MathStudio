@@ -90,3 +90,10 @@ wrong password and recovery; live native annotations plus browser camera/audio;
 physical iPhone/Android media; uninstall/reinstall and preserved preferences;
 Ctrl+C and console-close OWNER cleanup with active unrelated Python processes.
 Never interrupt a real lesson to run these tests.
+
+
+## Website Management review candidate
+
+Use `py -3.13 packaging/windows/build.py --review` for the PR #9 review artifact. It builds MathStudio-Website-Management-Review.exe with a different App ID, default install directory, shortcut and MathStudioReview settings profile. Keep the default review directory and do not replace the working MathStudio installation. The normal command above remains the production build path; distribution or replacement needs separate approval.
+
+The build inspects the actual frozen PYZ modules and payload files before compiling the installer. See client-isolation.json and build-manifest.json in the output folder. OWNER code, Argos/MiniSBD/SentencePiece/CTranslate2/ONNX/PyTorch/Stanza, models and databases must be absent. Only OWNER installs translation dependencies. Read ../../WEBSITE_MANAGEMENT.md for review installation, synthetic-account testing, canonical hongmaths.com/www examples and rollback precautions.

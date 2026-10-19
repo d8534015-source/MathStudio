@@ -1,7 +1,7 @@
 name: Windows teacher installer
 on:
   pull_request:
-    branches: ['codex/delivery-v4166']
+    branches: ['codex/delivery-v4166', 'codex/argos-offline-v4166']
     paths:
       - '**.py'
       - 'requirements.txt'
@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 30
     env:
       PYTHONUTF8: '1'
+      REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -45,12 +46,14 @@ jobs:
           chcp 936
           python -m unittest test_windows_startup -v
       - name: Build bundled client and single-file installer
-        run: python packaging/windows/build.py
+        run: python packaging/windows/build.py --review
       - name: Test owned Windows tunnel job cleanup
         run: python packaging/windows/check_owner_cleanup.py
       - name: Install, launch without Python on PATH, uninstall, reinstall
         timeout-minutes: 3
-        run: ./packaging/windows/smoke.ps1
+        run: ./packaging/windows/smoke.ps1 -Review
+      - name: Inspect Authenticode and scan with Defender when available
+        run: ./packaging/windows/verify_distribution.ps1
       - name: Record Windows regression outcome
         if: always()
         run: |
