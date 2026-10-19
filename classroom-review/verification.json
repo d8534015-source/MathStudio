@@ -1,0 +1,72 @@
+{
+  "source_commit": "5c3a5e16412d252782121727564d3029e4e4076a",
+  "base_pr": 9,
+  "draft_pr": 10,
+  "build_id": "v41.6.6-classroom-review1",
+  "manifest_sha256": "e239871e1848dfba9ff7620d8d773a49096101e335c0db5e6bc8dd4c74d13b36",
+  "owner_zip_sha256": "fb519758ed4cb1a9fdd30916597bc1c4a94b13a59e93b967c5e8874e5be81a75",
+  "owner_zip_entries": 131,
+  "owner_zip_crc": "passed",
+  "private_data_exclusion": "passed",
+  "python_full_suite": {
+    "executed": 204,
+    "passed": 201,
+    "skipped": 3,
+    "failed": 0,
+    "duration_seconds": 32.875,
+    "platform": "Linux CPython 3.13 / Xvfb",
+    "skips": [
+      "2 genuine Windows DPAPI tests",
+      "optional Chromium harness unavailable in Python 3.13 environment; separately executed with Playwright runtime"
+    ]
+  },
+  "focused_python": {
+    "passed": 27,
+    "failed": 0
+  },
+  "node_browser_workflows": {
+    "passed": 15,
+    "failed": 0
+  },
+  "real_synthetic_chromium_recording": {
+    "passed": 1,
+    "failed": 0,
+    "checks": [
+      "actual MediaRecorder output",
+      "FFmpeg audio/video decode",
+      "disabled audio omitted",
+      "screen/annotation letterboxing",
+      "pause/resume",
+      "rapid duplicate UI action prevention",
+      "original meeting tracks survive",
+      "authorization loss stops recording"
+    ]
+  },
+  "integrated_browser_smoke": "authenticated classroom mount/join, EN/Chinese switching, disabled recording and teacher recording library passed without page errors",
+  "physical_devices": "unverified",
+  "live_r2": "unverified; transport mocked",
+  "render_deployment": "not performed",
+  "trusted_signing": "not performed",
+  "windows_ci": {
+    "workflow_run": 39331282616,
+    "job": 118329944326,
+    "result": "success",
+    "platform": "hosted Windows Server 2025, not physical Windows 11",
+    "python": "3.13.12 x64",
+    "executed": 204,
+    "passed": 199,
+    "skipped": 5,
+    "failed": 0,
+    "duration_seconds": 172.229,
+    "chinese_codepage_checks": "passed",
+    "install_uninstall_reinstall": "passed",
+    "source_manifest_matches_owner_zip": true
+  },
+  "teacher_installer_sha256": "da568a5bc85ad575a7ae690011826296cd69460eb11637685adf6c69a8119514",
+  "windows_artifact_sha256": "2721f05251d09b903b8d9da6303a2ee51ed9835353fd641c6b6f738b5c254323",
+  "authenticode": "NotSigned",
+  "defender": {
+    "result": "scan_completed",
+    "threats_in_build": 0
+  }
+}
