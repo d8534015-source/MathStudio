@@ -140,18 +140,22 @@ def prepare_models(base,packages,model_files=None,sbd_files=None,allow_download=
     return installed
 
 
+def response_failure(prefix,reason,result):
+    summary=argos_runtime.worker_response_info(result)
+    error=RuntimeError(prefix+reason+' Protocol='+json.dumps(summary,separators=(',',':')))
+    error.worker_protocol=summary
+    return error
+
+
 def self_test(base,packages):
     # Test staged models before any active model or installation receipt changes.
-    env=argos_runtime.environment(base);env['ARGOS_PACKAGES_DIR']=str(packages)
     examples=[]
     for target,text in [('zh','We learn mathematics together.'),('en','我们一起学习数学。')]:
         texts=[text,'We solve an equation.' if target=='zh' else '我们解一个方程。']
         pair='en_zh' if target=='zh' else 'zh_en'
         prefix='Offline model self-test failed ('+pair+'). No new models were activated. '
         try:
-            result=subprocess.run([str(argos_runtime.python_path()),'-I','-u',str(ROOT/'argos_worker.py')],
-                input=json.dumps({'target':target,'pieces':texts},ensure_ascii=False).encode('utf-8'),stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,timeout=argos_runtime.TIMEOUT,cwd=base,env=env)
+            result=argos_runtime.run_worker({'target':target,'pieces':texts},base=base,packages=packages)
         except subprocess.TimeoutExpired:
             raise RuntimeError(prefix+'Worker exceeded the '+str(argos_runtime.TIMEOUT)+'-second deadline.') from None
         except OSError as error:
@@ -159,14 +163,15 @@ def self_test(base,packages):
             raise RuntimeError(prefix+'Worker could not start: '+type(error).__name__+codes) from None
         if result.returncode:
             # Libraries can log paths or input text. Only our sanitized record is printable.
-            raise RuntimeError(prefix+'Worker exit='+str(result.returncode)+'. '+argos_runtime.worker_diagnostic(result.stderr))
+            raise response_failure(prefix,'Worker exit='+str(result.returncode)+'. '+argos_runtime.worker_diagnostic(result.stderr),result)
         try:
-            values=argos_runtime.worker_json(result.stdout)['pieces']
+            if not result.response_present or len(result.response)>150000:raise ValueError()
+            values=argos_runtime.worker_json(result.response)['pieces']
             if not isinstance(values,list) or len(values)!=2 or any(not isinstance(x,str) or len(x)>20000 for x in values):
                 raise ValueError()
             translated=values[0]
         except (ValueError,KeyError,TypeError):
-            raise RuntimeError(prefix+'Invalid worker response; expected two translated strings.') from None
+            raise response_failure(prefix,'Invalid worker response; expected two translated strings.',result) from None
         if any(not value.strip() or value.strip()==source for source,value in zip(texts,values)):
             raise RuntimeError(prefix+'Validation rejected empty or unchanged translation.')
         examples.append({'target':target,'source':text,'translation':translated,'repeated_source':texts[1],'repeated_translation':values[1]})

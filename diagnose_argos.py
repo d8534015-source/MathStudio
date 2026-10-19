@@ -4,7 +4,6 @@ import contextlib
 import io
 import json
 from pathlib import Path
-import subprocess
 import tempfile
 import argos_runtime as runtime
 import argos_setup as setup
@@ -25,14 +24,12 @@ def main():
             # No pip or downloads, no active model/config/database modifications.
             with contextlib.redirect_stdout(io.StringIO()):
                 report['archives']=setup.prepare_models(base,packages,args.model_files,args.sbd_files,allow_download=False)
-            env=runtime.environment(base);env['ARGOS_PACKAGES_DIR']=str(packages)
-            result=subprocess.run([str(runtime.python_path()),'-I','-u',str(setup.ROOT/'argos_worker.py')],
-                input=json.dumps({'operation':'inspect'}).encode('utf-8'),capture_output=True,
-                timeout=runtime.TIMEOUT,cwd=base,env=env)
+            result=runtime.run_worker({'operation':'inspect'},base=base,packages=packages)
+            report['inspection_protocol']=runtime.worker_response_info(result)
             if result.returncode:
                 report['worker_failure']=runtime.worker_diagnostic(result.stderr)
                 raise RuntimeError('Inspection worker failed')
-            report['inspection']=runtime.worker_json(result.stdout)
+            report['inspection']=runtime.worker_json(result.response)
             with contextlib.redirect_stdout(io.StringIO()):report['examples']=setup.self_test(base,packages)
             report['status']='passed_staged_real_models'
     except Exception as error:
@@ -41,6 +38,7 @@ def main():
         message=str(error)
         if message.startswith('Offline model self-test failed'):
             report['self_test_failure']=message
+        if hasattr(error,'worker_protocol'):report['self_test_protocol']=error.worker_protocol
     try:
         args.output.parent.mkdir(parents=True,exist_ok=True)
         args.output.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')

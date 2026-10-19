@@ -27,6 +27,9 @@ def completed(*args):
     for name in ('stdout','stderr'):
         value=getattr(result,name)
         if isinstance(value,str):setattr(result,name,value.encode('utf-8'))
+    result.response=result.stdout
+    result.response_present=True
+    result.stdout=b''
     return result
 
 
@@ -136,20 +139,21 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(kwargs['timeout'],30)
                 self.assertEqual(Path(kwargs['cwd']).resolve(),Path(self.temp.name).resolve())
                 request=json.loads(kwargs['input']);self.assertEqual(request['pieces'],['Learn ',' today.'])
-                return completed(command,0,json.dumps({'pieces':['学习 ',' 今天。']}))
+                Path(kwargs['env']['MATH_ARGOS_RESULT_FILE']).write_bytes(json.dumps({'pieces':['学习 ',' 今天。']},ensure_ascii=False).encode('utf-8'))
+                return subprocess.CompletedProcess(command,0,b'',None)
             with mock.patch.object(ar.subprocess,'run',side_effect=run):
                 self.assertEqual(ar.translate('Learn '+token+' today.','zh'),'学习 '+token+' 今天。')
 
     def test_timeout_busy_and_bad_output_release_single_worker_slot(self):
         self.ready_files()
-        with mock.patch.object(ar.subprocess,'run',side_effect=subprocess.TimeoutExpired('synthetic',30)):
+        with mock.patch.object(ar,'run_worker',side_effect=subprocess.TimeoutExpired('synthetic',30)):
             with self.assertRaisesRegex(ar.ArgosError,'timed out'):ar.translate('Hello','zh')
         self.assertTrue(ar._SLOT.acquire(False))
         try:
             with self.assertRaisesRegex(ar.ArgosError,'busy'):ar.translate('Hello','zh')
         finally:ar._SLOT.release()
         for result in [completed([],2,''),completed([],0,'{}'),completed([],0,json.dumps({'pieces':[]})),completed([],0,json.dumps({'pieces':'x'}))]:
-            with mock.patch.object(ar.subprocess,'run',return_value=result):
+            with mock.patch.object(ar,'run_worker',return_value=result):
                 with self.assertRaises(ar.ArgosError):ar.translate('Hello','zh')
         self.assertTrue(ar._SLOT.acquire(False));ar._SLOT.release()
 
@@ -199,7 +203,9 @@ runpy.run_path(sys.argv[1],run_name='__main__')
         import sys
         base=Path(self.temp.name);root=base/'launcher';root.mkdir()
         script='import sys\nsys.path.insert(0,'+repr(str(Path(worker.__file__).resolve().parent))+')\n'+r'''
-import os,argos_worker
+import os
+os.write(1,b'cached startup diagnostic \xce\xd2\n')
+import argos_worker
 def native(payload):
     os.write(1,b'native stdout \xce\xd2\n')
     os.write(2,b'native stderr \xce\xd2\n')
@@ -223,16 +229,23 @@ raise SystemExit(argos_worker.main())
             self.assertFalse(any(key in kwargs for key in ('encoding','errors','text','universal_newlines')))
             result=real_run(command,**kwargs);captures.append(result)
             self.assertEqual(result.returncode,0,result.stderr)
-            self.assertIn(b'\xce',result.stderr);self.assertNotIn(b'native',result.stdout)
+            self.assertIn(b'\xce',result.stderr);self.assertEqual(result.stdout,b'cached startup diagnostic \xce\xd2\n')
+            self.assertEqual(ar.worker_json(Path(kwargs['env']['MATH_ARGOS_RESULT_FILE']).read_bytes())['pieces'][0],'学习数学' if json.loads(kwargs['input'])['target']=='zh' else 'Learn mathematics')
             self.assertNotIn(b'UnicodeDecodeError',result.stderr)
             if os.name=='nt':self.assertIn(b'native Win32 \xce\xd2',result.stderr)
             return result
-        with mock.patch.object(setup,'ROOT',root),mock.patch.object(ar,'python_path',return_value=Path(sys.executable)),mock.patch.object(setup.subprocess,'run',side_effect=launch),mock.patch('threading.excepthook') as thread_failure,contextlib.redirect_stdout(io.StringIO()):
+        with mock.patch.object(ar,'ROOT',root),mock.patch.object(ar,'python_path',return_value=Path(sys.executable)),mock.patch.object(setup.subprocess,'run',side_effect=launch),mock.patch('threading.excepthook') as thread_failure,contextlib.redirect_stdout(io.StringIO()):
             examples=setup.self_test(base,base/'packages')
         thread_failure.assert_not_called();self.assertEqual(len(captures),2)
         self.assertEqual(examples[0]['translation'],'学习数学')
         self.assertEqual(examples[0]['repeated_translation'],'我们解方程')
         self.assertEqual(examples[1]['translation'],'Learn mathematics')
+        info=ar.worker_response_info(captures[0])
+        self.assertTrue(info['unexpected_non_json_stdout'])
+        self.assertEqual(info['response']['json_parse'],'valid')
+        self.assertEqual(info['response']['piece_types'],{'str':2})
+        self.assertNotIn('学习数学',json.dumps(info,ensure_ascii=False))
+        self.assertNotIn('cached startup',json.dumps(info))
 
     def test_binary_json_is_strict_and_native_diagnostics_remain_sanitized(self):
         self.assertEqual(ar.worker_json('{"pieces":["中文"]}'.encode('utf-8')),{'pieces':['中文']})
@@ -249,18 +262,54 @@ raise SystemExit(argos_worker.main())
                (completed([],2,'','private path and synthetic-secret'),'No safe exception record'),
                (completed([],0,'not JSON',''),'Invalid worker response'),
                (completed([],0,json.dumps({'pieces':[]}),''),'Invalid worker response'),
+               (completed([],0,b'{}',b''),'Invalid worker response'),
+               (completed([],0,b'[]',b''),'Invalid worker response'),
+               (completed([],0,b'{"pieces":"translated"}',b''),'Invalid worker response'),
+               (completed([],0,b'{"pieces":["translated",42]}',b''),'Invalid worker response'),
+               (completed([],0,b'{"pieces":["translated"]}',b''),'Invalid worker response'),
                (completed([],0,b'{"pieces":["\xce"]}',b'native \xce'),'Invalid worker response'),
                (completed([],0,json.dumps({'pieces':['我们一起学习数学。','我们一起学习数学。']}),''),'unchanged translation'),
                (subprocess.TimeoutExpired('private path and synthetic-secret',30),'deadline'),
                (FileNotFoundError(2,'synthetic-secret','private path'),'errno=2')]
         for failed,expected in cases:
             with self.subTest(expected=expected):
-                with mock.patch.object(setup.subprocess,'run',side_effect=[good,failed]),contextlib.redirect_stdout(io.StringIO()):
+                with mock.patch.object(ar,'run_worker',side_effect=[good,failed]),contextlib.redirect_stdout(io.StringIO()):
                     with self.assertRaises(RuntimeError) as caught:setup.self_test(Path(self.temp.name),Path(self.temp.name)/'staged')
                 message=str(caught.exception)
                 self.assertIn('zh_en',message);self.assertIn(expected,message)
                 self.assertIn('No new models were activated',message)
                 self.assertNotIn('private path',message);self.assertNotIn('synthetic-secret',message)
+
+    def test_protocol_shape_classifies_without_disclosing_worker_content(self):
+        cases=[(b'', 'empty',False,False,None,{}),
+               (b'{', 'invalid_json',False,False,None,{}),
+               (b'[]','valid',False,False,None,{}),
+               (b'{}','valid',True,False,None,{}),
+               (b'{"pieces":"private-secret"}','valid',True,True,None,{}),
+               (b'{"pieces":["private-secret",42,null]}','valid',True,True,3,{'str':1,'int':1,'NoneType':1}),
+               (b'native private-secret\n{"pieces":["translated","translated"]}', 'invalid_json',True,True,2,{'str':2}),
+               (b'\xce\n{"pieces":["translated","translated"]}', 'invalid_utf8',True,True,2,{'str':2})]
+        for data,parse,obj,pieces,count,types in cases:
+            with self.subTest(parse=parse,data_type=type(data).__name__):
+                result=completed([],0,data,b'');result.stdout=b'native private-secret\xce'
+                info=ar.worker_response_info(result);shape=info['response']
+                self.assertEqual(info['exit_code'],0);self.assertTrue(info['response_present'])
+                self.assertEqual(shape['json_parse'],parse);self.assertEqual(shape['json_object'],obj)
+                self.assertEqual(shape['pieces_exists'],pieces);self.assertEqual(shape['pieces_count'],count)
+                self.assertEqual(shape['piece_types'],types);self.assertTrue(info['unexpected_non_json_stdout'])
+                self.assertNotIn('private-secret',json.dumps(info))
+
+    def test_missing_private_response_cannot_be_replaced_by_valid_stdout(self):
+        result=completed([],0,b'',b'')
+        result.response_present=False;result.stdout=b'{"pieces":["translated","translated"]}'
+        with mock.patch.object(ar,'run_worker',return_value=result):
+            with self.assertRaises(RuntimeError) as caught:setup.self_test(Path(self.temp.name),Path(self.temp.name)/'staged')
+        info=caught.exception.worker_protocol
+        self.assertFalse(info['response_present']);self.assertEqual(info['response']['json_parse'],'empty')
+        self.assertTrue(info['stdout']['json_object']);self.assertTrue(info['unexpected_stdout'])
+        self.assertFalse(info['unexpected_non_json_stdout'])
+        with mock.patch.object(ar,'ready',return_value=True),mock.patch.object(ar,'run_worker',return_value=result):
+            with self.assertRaises(ar.ArgosError):ar.translate('Learn mathematics.','zh')
 
     def test_retry_skips_pip_and_never_activates_models_on_second_direction_failure(self):
         base=Path(self.temp.name);python=ar.python_path();python.parent.mkdir(parents=True);python.touch()
@@ -274,16 +323,16 @@ raise SystemExit(argos_worker.main())
             (archives/(folder+'.argosmodel')).write_bytes(self.archive(data).getvalue())
         results=[completed([],0,json.dumps({'pieces':['学习数学','学习数学']}),''),completed([],2,'','ARGOS_DIAGNOSTIC exception=ValueError; at=argos_worker.run:65\n')]
         for failure in (results[1],completed([],0,b'{"pieces":["\xce"]}',b'native diagnostic \xce')):
-            with mock.patch.object(setup,'check_host'),mock.patch.object(setup.subprocess,'run',side_effect=[results[0],failure]) as child,contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.object(setup,'check_host'),mock.patch.object(ar,'run_worker',side_effect=[results[0],failure]) as child,contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaisesRegex(RuntimeError,'zh_en'):setup.install(model_files=archives,skip_dependencies=True,sbd_files=sentence_files)
             self.assertEqual(child.call_count,2)
             for call in child.call_args_list:
-                self.assertIn('argos_worker.py',call.args[0][-1]);self.assertNotIn('pip',call.args[0])
+                self.assertEqual(set(call.args[0]),{'target','pieces'});self.assertNotIn('pip',call.args[0])
             self.assertEqual((base/'installation.json').read_bytes(),original)
             self.assertEqual(list((base/'packages').iterdir()),[])
             self.assertFalse((base/'.setup.lock').exists());self.assertFalse(ar.ready())
         results[1]=completed([],0,json.dumps({'pieces':['We learn mathematics together.','We learn mathematics together.']}),'')
-        with mock.patch.object(setup,'check_host'),mock.patch.object(setup.subprocess,'run',side_effect=results) as child,contextlib.redirect_stdout(io.StringIO()):
+        with mock.patch.object(setup,'check_host'),mock.patch.object(ar,'run_worker',side_effect=results) as child,contextlib.redirect_stdout(io.StringIO()):
             setup.install(model_files=archives,skip_dependencies=True,sbd_files=sentence_files)
         self.assertEqual(child.call_count,2);self.assertTrue(ar.ready())
         receipt=json.loads((base/'installation.json').read_text(encoding='utf-8'))
@@ -303,7 +352,7 @@ raise SystemExit(argos_worker.main())
         good=completed([],0,json.dumps({'pieces':['translated','translated']}),'')
         bad=completed([],2,'','ARGOS_DIAGNOSTIC exception=ValueError; at=argos_worker.run:1\nprivate path')
         for failure in (False,True):
-            with self.subTest(failure=failure),mock.patch.object(setup,'check_host'),mock.patch.object(setup,'download_model',side_effect=AssertionError('No downloads')),mock.patch.object(setup.subprocess,'run',side_effect=[inspect,good,bad if failure else good]) as child,mock.patch('sys.argv',['diagnose_argos.py','--model-files',str(archives),'--sbd-files',str(sentences),'--output',str(output)]),contextlib.redirect_stdout(io.StringIO()):
+            with self.subTest(failure=failure),mock.patch.object(setup,'check_host'),mock.patch.object(setup,'download_model',side_effect=AssertionError('No downloads')),mock.patch.object(ar,'run_worker',side_effect=[inspect,good,bad if failure else good]) as child,mock.patch('sys.argv',['diagnose_argos.py','--model-files',str(archives),'--sbd-files',str(sentences),'--output',str(output)]),contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(diagnose_argos.main(),1 if failure else 0)
             report=json.loads(output.read_text(encoding='utf-8'))
             self.assertEqual(report['status'],'failed' if failure else 'passed_staged_real_models')

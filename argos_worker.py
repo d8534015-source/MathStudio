@@ -150,9 +150,11 @@ def run(payload):
 
 def main():
     try:
-        # Keep a dedicated protocol pipe. redirect_stdout alone cannot redirect
-        # C/C++ writes to fd 1 or Windows DLLs using GetStdHandle(STD_OUTPUT_HANDLE).
-        with os.fdopen(os.dup(sys.stdout.fileno()),'wb') as protocol:
+        # Parent callers use a private response file, independent of even cached
+        # native stdout handles. The pipe fallback is for direct/manual invocation.
+        result_file=os.environ.get('MATH_ARGOS_RESULT_FILE')
+        descriptor=os.open(result_file,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600) if result_file else os.dup(sys.stdout.fileno())
+        with os.fdopen(descriptor,'wb') as protocol:
             sys.stdout.flush()
             os.dup2(sys.stderr.fileno(),sys.stdout.fileno())
             if os.name=='nt':

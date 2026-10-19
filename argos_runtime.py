@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import threading
+import tempfile
 from runtime_paths import state_directory
 
 ROOT = Path(__file__).resolve().parent
@@ -79,6 +80,68 @@ def worker_json(data):
     return json.loads(data.decode('utf-8'))
 
 
+def run_worker(payload,*,base,packages=None,diagnostics=True):
+    # Native runtimes can cache stdout before main() redirects it. Response data
+    # therefore has its own private, parent-created location, never a log pipe.
+    with tempfile.TemporaryDirectory(prefix='response-',dir=base) as directory:
+        path=Path(directory)/'result.json';env=environment(base)
+        env['MATH_ARGOS_RESULT_FILE']=str(path)
+        if packages is not None:env['ARGOS_PACKAGES_DIR']=str(packages)
+        options={}
+        if os.name=='nt':options['creationflags']=subprocess.CREATE_NO_WINDOW|subprocess.BELOW_NORMAL_PRIORITY_CLASS
+        result=subprocess.run([str(python_path()),'-I','-u',str(ROOT/'argos_worker.py')],
+            input=json.dumps(payload,ensure_ascii=False).encode('utf-8'),stdout=subprocess.PIPE if diagnostics else subprocess.DEVNULL,
+            stderr=subprocess.PIPE if diagnostics else subprocess.DEVNULL,timeout=TIMEOUT,cwd=base,env=env,**options)
+        result.response_present=path.is_file()
+        result.response=b''
+        if result.response_present:
+            with path.open('rb') as stream:result.response=stream.read(150001)
+        return result
+
+
+def _json_shape(data):
+    # Classification only: an embedded object never makes corrupt protocol valid.
+    info={'json_parse':'empty','json_object':False,'pieces_exists':False,
+          'pieces_type':None,'pieces_count':None,'piece_types':{},'non_json_output':False}
+    if not data:return info
+    if len(data)>150000:
+        info.update(json_parse='oversized',non_json_output=True);return info
+    invalid_utf8=False
+    try:text=data.decode('utf-8')
+    except UnicodeDecodeError:
+        info.update(json_parse='invalid_utf8',non_json_output=True)
+        invalid_utf8=True;text=data.decode('utf-8',errors='replace')
+    try:
+        obj=json.loads(text)
+        if not invalid_utf8:info['json_parse']='valid'
+    except ValueError:
+        if not invalid_utf8:info['json_parse']='invalid_json'
+        info['non_json_output']=True;obj=None
+        decoder=json.JSONDecoder()
+        starts=(match.start() for match in re.finditer(r'\{',text))
+        for _,start in zip(range(16),starts):
+            try:candidate,_=decoder.raw_decode(text,start)
+            except ValueError:continue
+            if isinstance(candidate,dict):obj=candidate;break
+    if isinstance(obj,dict):
+        info['json_object']=True;info['pieces_exists']='pieces' in obj
+        if 'pieces' in obj:
+            pieces=obj['pieces'];info['pieces_type']=type(pieces).__name__
+            if isinstance(pieces,list):
+                info['pieces_count']=len(pieces)
+                for item in pieces:
+                    name=type(item).__name__;info['piece_types'][name]=info['piece_types'].get(name,0)+1
+    return info
+
+
+def worker_response_info(result):
+    stdout=result.stdout or b''
+    stdout_shape=_json_shape(stdout)
+    return {'exit_code':result.returncode,'transport':'private_file','response_present':result.response_present,
+            'response':_json_shape(result.response),'stdout':stdout_shape,
+            'unexpected_stdout':bool(stdout.strip()),'unexpected_non_json_stdout':stdout_shape['non_json_output']}
+
+
 def worker_diagnostic(data):
     # Native Windows diagnostics may use an ANSI codepage. Decode lossily only
     # on this non-protocol channel, then retain the sanitized ASCII record only.
@@ -101,21 +164,16 @@ def translate(text, target):
         # Tokens/names/math never pass through the model. They are rejoined verbatim.
         pieces = TOKEN.split(text)
         payload = {'target': target, 'pieces': pieces[::2]}
-        options = {}
-        if os.name == 'nt':
-            options['creationflags'] = subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS
         try:
-            result = subprocess.run([str(python_path()), '-I', '-u', str(ROOT/'argos_worker.py')],
-                input=json.dumps(payload,ensure_ascii=False).encode('utf-8'),stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,timeout=TIMEOUT,cwd=str(home()),env=environment(home()),**options)
+            result = run_worker(payload,base=home(),diagnostics=False)
         except subprocess.TimeoutExpired:
             raise ArgosError('Offline translation timed out. Original content is unchanged.') from None
         except OSError:
             raise ArgosError('Offline translation could not start. Run OWNER offline translation setup.') from None
-        if result.returncode or len(result.stdout) > 150000:
+        if result.returncode or not result.response_present or len(result.response) > 150000:
             raise ArgosError('Offline translation failed. Original content is unchanged.')
         try:
-            translated = worker_json(result.stdout)['pieces']
+            translated = worker_json(result.response)['pieces']
             if not isinstance(translated,list) or len(translated) != len(pieces[::2]) or any(not isinstance(x,str) or len(x)>20000 for x in translated):
                 raise ValueError()
         except (ValueError, KeyError, TypeError):
