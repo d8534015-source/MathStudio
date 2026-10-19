@@ -293,7 +293,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "c22e9dd69ddb433a012f7105e000e8469e9fc883e7e968783a71a7258d09c5b7"
+      "sha256": "1ee85ca9f5a9805bed828c7c4283a7d5553157d5474f171139fe58ab50336415"
     },
     "setup_free_media.ps1": {
       "packages": [
@@ -455,7 +455,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "48a8e52ffcf69a3f4468754ede9852f08b27f20e19e7e3f79167f91a4071b8ef"
+      "sha256": "9364de31eda098f5d2adc679bff36ae2ced2c72c1e2d427aaab41409eee1994d"
     },
     "packaging/windows/MathStudio.spec": {
       "packages": [
@@ -764,7 +764,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "8a62969417d3969a502fc4d33bc8eabdf832dd820e1d4428214376ae1ebf8c12"
+      "sha256": "912e644a54d35c763bc13ce989f99235f29610a05af6d08ee6cbd10709dae504"
     },
     "PR9_PAIRING_REVIEW.md": {
       "packages": [

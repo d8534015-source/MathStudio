@@ -30,7 +30,8 @@ def assets(review=False):
     draw.rounded_rectangle((8,8,248,248),radius=48,fill='#0d2f34',outline='#22a699',width=10)
     draw.line([(55,190),(55,65),(128,145),(201,65),(201,190)],fill='#dff5ed',width=20,joint='curve')
     image.save(target/'MathStudio.ico',sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
-    (target/'version.txt').write_text("""VSVersionInfo(ffi=FixedFileInfo(filevers=(41,6,6,0),prodvers=(41,6,6,0),mask=0x3f,flags=0,OS=0x40004,fileType=1,subtype=0,date=(0,0)),kids=[StringFileInfo([StringTable('040904B0',[StringStruct('CompanyName','MathStudio project'),StringStruct('FileDescription','MathStudio Teacher Review'),StringStruct('FileVersion','41.6.6'),StringStruct('ProductName','MathStudio'),StringStruct('ProductVersion','41.6.6'),StringStruct('OriginalFilename','MathStudioClient.exe')])]),VarFileInfo([VarStruct('Translation',[1033,1200])])])""",encoding='utf-8')
+    description='MathStudio Teacher Review' if review else 'MathStudio Teacher'
+    (target/'version.txt').write_text("""VSVersionInfo(ffi=FixedFileInfo(filevers=(41,6,6,0),prodvers=(41,6,6,0),mask=0x3f,flags=0,OS=0x40004,fileType=1,subtype=0,date=(0,0)),kids=[StringFileInfo([StringTable('040904B0',[StringStruct('CompanyName','MathStudio project'),StringStruct('FileDescription','MathStudio Teacher'),StringStruct('FileVersion','41.6.6'),StringStruct('ProductName','MathStudio'),StringStruct('ProductVersion','41.6.6'),StringStruct('OriginalFilename','MathStudioClient.exe')])]),VarFileInfo([VarStruct('Translation',[1033,1200])])])""".replace("StringStruct('FileDescription','MathStudio Teacher')","StringStruct('FileDescription',"+repr(description)+")"),encoding='utf-8')
 
 
 def main():

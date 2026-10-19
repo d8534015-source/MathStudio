@@ -156,6 +156,15 @@ class RememberTests(BackendCase):
         with self.app.db() as c:c.execute('DELETE FROM desktop_credentials')
         self.assertEqual(self.request('/api/teacher-app/state?token='+out['token'])[0],403)
 
+    def test_disabling_remember_preserves_current_native_classroom_session(self):
+        teacher,payload=self.remember();meeting=self.instant(teacher)
+        status,out,_=self.request('/api/admin/teacher-app-launch',{'class_id':meeting['class_id']},teacher)
+        self.assertEqual(status,200,out);cookie=teacher['cookie']
+        self.assertEqual(self.request('/api/desktop/forget',{},teacher)[0],200)
+        self.assertEqual(teacher['cookie'],cookie)
+        self.assertEqual(self.request('/api/teacher-app/state?token='+out['token'])[0],200)
+        self.assertEqual(self.request('/api/desktop/refresh',payload,self.client())[0],401)
+
     @unittest.skipUnless(os.name=='nt','DPAPI process restart acceptance requires Windows')
     def test_real_windows_remember_restore_in_new_process_and_logout(self):
         origin=f'http://127.0.0.1:{self.http.server_port}'
@@ -172,6 +181,17 @@ class RememberTests(BackendCase):
 
 
 class DesktopStorageTests(unittest.TestCase):
+    def test_build_metadata_labels_only_review_builds_as_review(self):
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('review_windows_build',Path(__file__).parent/'packaging/windows/build.py')
+        build=importlib.util.module_from_spec(spec);spec.loader.exec_module(build)
+        with tempfile.TemporaryDirectory() as folder,mock.patch.object(build,'HERE',Path(folder)):
+            for review in (True,False):
+                build.assets(review=review)
+                metadata=(Path(folder)/'generated/version.txt').read_text(encoding='utf-8')
+                self.assertEqual('MathStudio Teacher Review' in metadata,review)
+                self.assertIn("StringStruct('CompanyName','MathStudio project')",metadata)
+
     def test_no_non_windows_plaintext_fallback(self):
         with mock.patch.object(desktop_credentials,'available',return_value=False):
             with self.assertRaises(RuntimeError):desktop_credentials.crypt(b'synthetic','https://owner.example')

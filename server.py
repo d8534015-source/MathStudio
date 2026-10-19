@@ -1437,8 +1437,11 @@ class Handler(BaseHTTPRequestHandler):
             selected=d.get('refresh','')
             need(isinstance(selected,str) and len(selected)<=150,'Invalid device credential.')
             selector=selected.split('.')[0] if selected else self.session.get('remember_id','')
-            with db() as c:c.execute('DELETE FROM desktop_credentials WHERE selector=? AND user_id=?',(selector,self.user['id']))
-            uid=self.user['id'];self.rotate(uid)
+            with db() as c:c.execute('DELETE FROM desktop_credentials WHERE selector IN (?,?) AND user_id=?',
+                                    (selector,self.session.get('remember_id',''),self.user['id']))
+            # Forget future restoration without interrupting this ordinary
+            # authenticated session or its active native classroom tokens.
+            self.session.pop('remember_id',None)
             return {'ok':True,'csrf':self.session['csrf']}
         if path=='/api/instant/join':
             self.limit_meeting_code()
