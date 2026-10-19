@@ -127,11 +127,14 @@ class RuntimeTests(unittest.TestCase):
             engine=translate.PackageTranslation(None,None,pkg)
             detector=engine.sentencizer;self.assertIsInstance(detector,sbd.MiniSBDSentencizer)
             text='We learn mathematics. We solve an equation.' if pair=='en_zh' else '我们学习数学。我们解一个方程。'
+            text=worker.read_request(io.BytesIO(json.dumps({'text':text},ensure_ascii=False).encode('utf-8')))['text']
+            text.encode('utf-8')  # Strict validity immediately before MiniSBD.
             with mock.patch('stanza.Pipeline',side_effect=AssertionError('No legacy Stanza path')),mock.patch('torch.load',side_effect=AssertionError('No checkpoint conversion')),mock.patch('socket.create_connection',side_effect=AssertionError('No network')):
                 first=detector.split_sentences(text);second=detector.split_sentences(text)
             self.assertEqual(first,second);self.assertEqual(len(first),2)
             self.assertEqual(detector.detector.session.get_providers(),['CPUExecutionProvider'])
             self.assertTrue(all(type(sentence) is str and sentence for sentence in first))
+            for sentence in first+second:sentence.encode('utf-8')  # And after it.
             # Exercise the exact Argos hypotheses -> MiniSBD -> tokenizer call
             # chain, stopping before unavailable CTranslate2 model inference.
             class EncodingComplete(Exception):pass
@@ -307,10 +310,16 @@ runpy.run_path(sys.argv[1],run_name='__main__')
         import sys
         base=Path(self.temp.name);root=base/'launcher';root.mkdir()
         script='import sys\nsys.path.insert(0,'+repr(str(Path(worker.__file__).resolve().parent))+')\n'+r'''
-import os
+import os,io
+# Reproduce redirected stdin on a Chinese-locale Windows installation even
+# when this test runs on Linux or a Windows machine using UTF-8 mode.
+sys.stdin=io.TextIOWrapper(sys.stdin.buffer,encoding='cp936',errors='surrogateescape')
 os.write(1,b'cached startup diagnostic \xce\xd2\n')
 import argos_worker
 def native(payload):
+    expected=['We learn mathematics together.','We solve an equation.'] if payload['target']=='zh' else ['我们一起学习数学。','我们解一个方程。']
+    assert payload['pieces']==expected
+    for piece in payload['pieces']:piece.encode('utf-8')
     os.write(1,b'native stdout \xce\xd2\n')
     os.write(2,b'native stderr \xce\xd2\n')
     print('Python diagnostic',flush=True)
@@ -350,6 +359,35 @@ raise SystemExit(argos_worker.main())
         self.assertEqual(info['response']['piece_types'],{'str':2})
         self.assertNotIn('学习数学',json.dumps(info,ensure_ascii=False))
         self.assertNotIn('cached startup',json.dumps(info))
+
+    def test_utf8_request_reproduces_cp936_surrogates_and_decodes_losslessly(self):
+        request={'target':'en','pieces':['我们一起学习数学。','我们解一个方程。']}
+        data=json.dumps(request,ensure_ascii=False).encode('utf-8')
+        old=io.TextIOWrapper(io.BytesIO(data),encoding='cp936',errors='surrogateescape')
+        damaged=json.loads(old.read())['pieces'][0]
+        self.assertEqual(len(damaged),16)
+        with self.assertRaises(UnicodeEncodeError):damaged.encode('utf-8')
+        shape=worker.input_shape(damaged,'sp_sentence')
+        self.assertIn('sp_sentence_low_surrogates=5',shape)
+        self.assertIn('sp_sentence_high_surrogates=0',shape)
+        for _ in range(2):
+            decoded=worker.read_request(io.BytesIO(data))
+            self.assertEqual(decoded,request)
+            self.assertEqual(len(decoded['pieces'][0]),9)
+            for piece in decoded['pieces']:piece.encode('utf-8')
+
+    def test_request_rejects_invalid_utf8_surrogates_and_oversize_without_runtime(self):
+        with self.assertRaises(UnicodeDecodeError):worker.read_request(io.BytesIO(b'{"pieces":["\xce"]}'))
+        for data in (b' '*100001,b' '*400001):
+            with self.assertRaisesRegex(ValueError,'too large'):worker.read_request(io.BytesIO(data))
+        # ASCII JSON can itself escape an invalid Unicode scalar. It must not
+        # reach optional libraries even though the transport bytes are valid.
+        payload=worker.read_request(io.BytesIO(b'{"target":"en","pieces":["\\ud800"]}'))
+        with mock.patch.object(worker,'offline_environment'),mock.patch.object(worker,'initialize') as initialize:
+            with self.assertRaises(UnicodeEncodeError):worker.run(payload)
+        initialize.assert_not_called()
+        request={'target':'en','pieces':['数学😀。']}
+        self.assertEqual(worker.read_request(io.BytesIO(json.dumps(request).encode('ascii'))),request)
 
     def test_binary_json_is_strict_and_native_diagnostics_remain_sanitized(self):
         self.assertEqual(ar.worker_json('{"pieces":["中文"]}'.encode('utf-8')),{'pieces':['中文']})

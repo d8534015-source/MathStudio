@@ -53,6 +53,9 @@ def input_shape(value,prefix):
             encoding='valid'
         except (UnicodeEncodeError,UnicodeDecodeError):encoding='invalid'
         labels.append(prefix+'_utf8='+encoding)
+        if kind is str and encoding=='invalid':
+            labels.append(prefix+'_high_surrogates='+str(sum(0xD800<=ord(x)<=0xDBFF for x in value)))
+            labels.append(prefix+'_low_surrogates='+str(sum(0xDC00<=ord(x)<=0xDFFF for x in value)))
     if kind in (list,tuple):
         for index,item in enumerate(value[:4]):
             child=prefix+'_item'+str(index);item_kind=type(item)
@@ -214,6 +217,9 @@ def run(payload):
     target=payload.get('target');pieces=payload.get('pieces')
     if target not in ('en','zh') or not isinstance(pieces,list) or any(not isinstance(x,str) for x in pieces) or sum(map(len,pieces))>20000:
         raise ValueError('Invalid request')
+    # JSON permits escaped lone surrogates; valid UTF-8 bytes alone do not rule
+    # those out. Reject malformed text before any optional runtime/model work.
+    for piece in pieces:piece.encode('utf-8')
     translate,_=initialize()
     from opencc import OpenCC
     source = 'en' if target == 'zh' else 'zh'
@@ -244,6 +250,17 @@ def run(payload):
     return {'pieces':result}
 
 
+def read_request(stream):
+    # -I ignores PYTHONUTF8/PYTHONIOENCODING, and Windows redirected stdin can
+    # use CP936 + surrogateescape. The protocol is UTF-8, independent of locale.
+    # Preserve the existing character bound, with a bounded worst-case byte read.
+    raw=stream.read(400005)
+    if len(raw)>400000:raise ValueError('Worker request is too large')
+    text=raw.decode('utf-8')
+    if len(text)>100000:raise ValueError('Worker request is too large')
+    return json.loads(text)
+
+
 def main():
     try:
         # Parent callers use a private response file, independent of even cached
@@ -260,7 +277,7 @@ def main():
                 setter.argtypes=(ctypes.c_uint32,ctypes.c_void_p);setter.restype=ctypes.c_int
                 if not setter(0xfffffff5,msvcrt.get_osfhandle(sys.stderr.fileno())):
                     raise OSError('Cannot isolate worker protocol output')
-            payload=json.loads(sys.stdin.read(100001))
+            payload=read_request(sys.stdin.buffer)
             with contextlib.redirect_stdout(sys.stderr):result=run(payload)
             protocol.write(json.dumps(result,ensure_ascii=False).encode('utf-8')+b'\n')
             protocol.flush()
