@@ -139,6 +139,68 @@ runpy.run_path(sys.argv[1],run_name='__main__')
         unknown={'en':{'tokenize':{'ewt':{}}}}
         self.assertEqual(worker.compatible_stanza_resources(unknown),unknown)
 
+    def test_legacy_tokenizer_metadata_keeps_weights_and_rejects_unknown_schema(self):
+        config={'vocab_size':3,'emb_dim':2,'hidden_dim':2,'dropout':0.0}
+        legacy={'model':{'synthetic':'unchanged'},'vocab':{'synthetic':'unchanged'},'config':config}
+        adapted=worker.compatible_tokenizer_checkpoint(legacy)
+        self.assertEqual(adapted['config'],dict(config,feat_dropout=0.0))
+        self.assertIsNone(adapted['lexicon']);self.assertNotIn('feat_dropout',config)
+        self.assertNotIn('lexicon',legacy)
+        self.assertIs(adapted['model'],legacy['model']);self.assertIs(adapted['vocab'],legacy['vocab'])
+        modern=dict(legacy,config=dict(config,feat_dropout=0.25),lexicon=['existing'])
+        self.assertIs(worker.compatible_tokenizer_checkpoint(modern),modern)
+        broken_modern=dict(legacy,config=dict(config,feat_dropout=0.25))
+        self.assertIs(worker.compatible_tokenizer_checkpoint(broken_modern),broken_modern)
+        self.assertNotIn('lexicon',broken_modern)
+        malformed=dict(legacy,config={'emb_dim':2})
+        self.assertIs(worker.compatible_tokenizer_checkpoint(malformed),malformed)
+        self.assertIn('missing_key=feat_dropout',worker.safe_diagnostic(KeyError('feat_dropout')))
+        self.assertNotIn('private-secret',worker.safe_diagnostic(KeyError('private-secret')))
+
+    @unittest.skipUnless(importlib.util.find_spec('stanza'),'Optional installed Stanza runtime required')
+    def test_actual_stanza_legacy_checkpoint_loads_strictly_without_changing_tensors(self):
+        import stanza
+        import torch
+        from stanza.pipeline import core
+        from stanza.models.tokenization import trainer
+        from stanza.models.tokenization.model import Tokenizer
+        from stanza.models.tokenization.vocab import Vocab
+        original_torch=trainer.torch
+        with tempfile.TemporaryDirectory() as folder:
+            for lang in ('en','zh'):
+                with self.subTest(lang=lang):
+                    vocab=Vocab([[('a',0)]],lang=lang)
+                    config={'vocab_size':len(vocab),'emb_dim':2,'hidden_dim':2,'dropout':0.0,
+                            'feat_dim':1,'rnn_layers':1,'conv_res':None,'hierarchical':False,
+                            'tok_noise':0.0,'lr0':0.001,'weight_decay':0.0,'lang':lang}
+                    current=dict(config,feat_dropout=0.0,use_mwt=True)
+                    with torch.random.fork_rng(devices=[]):
+                        torch.manual_seed(19)
+                        model=Tokenizer(current,current['vocab_size'],2,2,dropout=0.0,feat_dropout=0.0)
+                    checkpoint={'config':config,'model':model.state_dict(),'vocab':vocab.state_dict()}
+                    model_dir=Path(folder)/lang/'tokenize';model_dir.mkdir(parents=True)
+                    model_file=model_dir/'legacy.pt';torch.save(checkpoint,model_file);original=model_file.read_bytes()
+                    with self.assertRaises(KeyError) as caught:trainer.Trainer(model_file=str(model_file),device='cpu')
+                    self.assertEqual(caught.exception.args,('feat_dropout',))
+                    resources={lang:{'tokenize':{'legacy':{}},'default_processors':{'tokenize':'legacy'}}}
+                    (Path(folder)/'resources.json').write_text(json.dumps(resources),encoding='utf-8')
+                    real_load=torch.load
+                    with mock.patch.object(torch,'load',wraps=real_load) as restricted_load,mock.patch.object(core,'download_resources_json',side_effect=AssertionError('No downloads')),mock.patch.object(core,'download_models',side_effect=AssertionError('No downloads')):
+                        pipeline=worker.offline_stanza_pipeline(stanza.Pipeline,lang=lang,dir=folder,processors='tokenize',use_gpu=False,logging_level='ERROR')
+                    self.assertTrue(restricted_load.called)
+                    self.assertTrue(all(call.kwargs.get('weights_only') is True for call in restricted_load.call_args_list))
+                    loaded=pipeline.processors['tokenize']._trainer
+                    self.assertIsNone(loaded.lexicon);self.assertIsNone(loaded.dictionary)
+                    self.assertEqual(loaded.args['feat_dropout'],0.0)
+                    for name,value in checkpoint['model'].items():
+                        self.assertTrue(torch.equal(loaded.model.state_dict()[name],value),name)
+                    self.assertEqual(model_file.read_bytes(),original);self.assertIs(trainer.torch,original_torch)
+                    # Corrupt weights still fail strict validation; no invented parameters.
+                    del checkpoint['model']['embeddings.weight'];torch.save(checkpoint,model_file)
+                    with self.assertRaisesRegex(RuntimeError,'Missing key'):
+                        worker.offline_stanza_pipeline(stanza.Pipeline,lang=lang,dir=folder,processors='tokenize',use_gpu=False,logging_level='ERROR')
+                    self.assertIs(trainer.torch,original_torch)
+
     @unittest.skipUnless(importlib.util.find_spec('stanza'),'Optional installed Stanza runtime required')
     def test_actual_stanza_legacy_resource_initialization_both_languages_stays_offline(self):
         import stanza

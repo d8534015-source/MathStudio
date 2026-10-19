@@ -18,6 +18,10 @@ def safe_diagnostic(error):
         seen.add(id(error))
         name=type(error).__name__
         details.append('exception='+name if re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]{0,79}',name) else 'exception=Unknown')
+        # Only fixed schema labels are safe to expose; arbitrary KeyError text is not.
+        schema_keys={'feat_dropout','lexicon','config','model','vocab','vocab_size','emb_dim','hidden_dim','dropout','packages'}
+        if isinstance(error,KeyError) and len(error.args)==1 and isinstance(error.args[0],str) and error.args[0] in schema_keys:
+            details.append('missing_key='+error.args[0])
         for key in ('errno','winerror'):
             value=getattr(error,key,None)
             if type(value) is int:details.append(key+'='+str(value))
@@ -43,18 +47,39 @@ def compatible_stanza_resources(resources):
     return result
 
 
+def compatible_tokenizer_checkpoint(checkpoint):
+    # Legacy Stanza saved exactly model/vocab/config, before feature dropout and
+    # lexicons existed. Preserve all weights and dimensions for strict loading.
+    if not isinstance(checkpoint,dict) or set(checkpoint)!={'model','vocab','config'}:
+        return checkpoint
+    config=checkpoint['config']
+    if not isinstance(config,dict) or 'feat_dropout' in config or not {'vocab_size','emb_dim','hidden_dim','dropout'}<=config.keys():
+        return checkpoint
+    return {**checkpoint,'config':{**config,'feat_dropout':0.0},'lexicon':None}
+
+
 def offline_stanza_pipeline(pipeline,*args,**kwargs):
     from stanza.pipeline import core
+    from stanza.models.tokenization import trainer
     loader=core.load_resources_json
+    original_torch=trainer.torch
     def load_compatible(*load_args,**load_kwargs):
         return compatible_stanza_resources(loader(*load_args,**load_kwargs))
+    class TokenizerTorch:
+        def load(self,*load_args,**load_kwargs):
+            # Keep Stanza's weights_only=True and normal strict load_state_dict.
+            return compatible_tokenizer_checkpoint(original_torch.load(*load_args,**load_kwargs))
+        def __getattr__(self,name):
+            return getattr(original_torch,name)
     kwargs['download_method']=None
     # This patch is confined to the single inference child and this initialization.
     core.load_resources_json=load_compatible
+    trainer.torch=TokenizerTorch()
     try:
         return pipeline(*args,**kwargs)
     finally:
         core.load_resources_json=loader
+        trainer.torch=original_torch
 
 
 def run(payload):
