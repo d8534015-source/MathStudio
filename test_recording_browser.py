@@ -40,7 +40,7 @@ class BrowserRecording(unittest.TestCase):
                       const post=async(action,data)=>{actions.push({action,data});if(action==='recording-start')return {id:'a'.repeat(32),lease_ms:1500,allowed:['teacher','student']};if(action==='recording-heartbeat')return {lease_ms:1500,allowed:['teacher','student']};if(action==='recording-pause'||action==='recording-resume')return {phase:action.endsWith('pause')?'paused':'active',owner:true};return {};};
                       const api=async(path,data)=>{actions.push({action:path,data});return {csrf:'synthetic'};};
                       window.r=new MeetingRecorder({host:document.querySelector('#controls'),admin:true,post,api,notice:x=>messages.push(x),snapshot:()=>({board,screen:{id:'teacher',element:sv},cameras:[{id:'student',element:v,enabled:true}],audio:[{id:'student',track:mic,enabled:true},{id:'teacher',track:disabled,enabled:false}]})});
-                      r.state={phase:'pending',owner:true};await r.start();
+                      r.update({phase:'pending',owner:true,consent_count:2,participants:2});const start=Array.from(document.querySelectorAll('#controls button')).find(x=>x.textContent==='Start recording');start.click();start.click();while(!r.running)await new Promise(resolve=>setTimeout(resolve,10));if(actions.filter(x=>x.action==='recording-start').length!==1)throw new Error('Duplicate start request');
                     }''')
                     page.wait_for_timeout(1250)
                     state=page.evaluate("({sources:r.sources.size,tracks:r.stream.getTracks().map(x=>x.kind),pixel:Array.from(r.ctx.getImageData(256,216,1,1).data)})")

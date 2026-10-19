@@ -804,7 +804,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "5ee1316fdf64f706da207f3f60891ebbd106982fb1ca4833d62aade84eea344d"
+      "sha256": "10fcd58fe6a01dc5d064a8171b754b901413708800200500f56e9f5913f9275c"
     },
     "classroom_recording.py": {
       "packages": [
@@ -846,7 +846,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "3440d8554329c0ff487f93180e4966b106007c409c131b694e2c31b7424d9a44"
+      "sha256": "2c1b3869d0b2ba3b8f1619480beca734afe988d892ce0c439f0dc6ea4424be7c"
     },
     "packaging/benchmark_pen.py": {
       "packages": [

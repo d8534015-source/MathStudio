@@ -18,7 +18,7 @@ export class MeetingRecorder{
     this.visibility=()=>{if(document.hidden&&this.running)this.stop(false);};document.addEventListener('visibilitychange',this.visibility);
     this.language=()=>this.render();window.addEventListener('mathstudio-language',this.language);this.render();
   }
-  button(label,action){const b=document.createElement('button');b.textContent=recordingText(label);b.className='small secondary';b.onclick=()=>Promise.resolve(action()).catch(e=>this.notice(e.message));this.host.append(b);return b;}
+  button(label,action){const b=document.createElement('button');b.textContent=recordingText(label);b.className='small secondary';b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){this.notice(e.message);}finally{b.disabled=false;}};this.host.append(b);return b;}
   render(){
     this.host.replaceChildren();const p=document.createElement('p');p.setAttribute('role','status');p.textContent=recordingText(this.state.phase);this.host.append(p);
     if(this.state.notice){const n=document.createElement('p');n.dataset.noTranslate='';n.textContent=this.state.notice;this.host.append(n);}
