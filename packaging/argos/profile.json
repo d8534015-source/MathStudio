@@ -1,0 +1,26 @@
+{
+  "id": "argos111-minisbd095-v1",
+  "versions": {
+    "argostranslate": "1.11.0",
+    "ctranslate2": "4.8.3",
+    "sentencepiece": "0.2.2",
+    "minisbd": "0.9.5",
+    "onnxruntime": "1.31.0",
+    "stanza": "1.10.1",
+    "spacy": "3.8.16",
+    "torch": "2.14.1+cpu",
+    "opencc-python-reimplemented": "0.1.7"
+  },
+  "sentence_models": {
+    "en_zh": {
+      "filename": "en.onnx",
+      "url": "https://github.com/LibreTranslate/MiniSBD/releases/download/v0.0.1/en.onnx",
+      "sha256": "6fa9f3a3b201687bd43e329b2b0736789efc97b37883b5b759b31988dca9f353"
+    },
+    "zh_en": {
+      "filename": "zh-hans.onnx",
+      "url": "https://github.com/LibreTranslate/MiniSBD/releases/download/v0.0.1/zh-hans.onnx",
+      "sha256": "b2a6e45ebb43df44ac3c8e4100ea1cb30ec8319c5698b678ed3f203e5edc5d0e"
+    }
+  }
+}

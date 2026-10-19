@@ -3,6 +3,7 @@
 No account, message, file, private-class or booking source is accepted here.
 Provider calls run outside database transactions. Credentials never enter API output.
 """
+import argos_runtime
 import hashlib
 import json
 import os
@@ -54,12 +55,19 @@ def sources(c):
 
 def config(c):
     row = c.execute('SELECT enabled,terms FROM public_translation_config WHERE id=1').fetchone()
+    name = provider_name()
     return {'enabled': bool(row['enabled']), 'terms': json.loads(row['terms']),
-            'provider': provider_name(), 'configured': provider_name() != 'disabled'}
+            'provider': name, 'offline': name == 'argos',
+            'configured': argos_runtime.ready() if name == 'argos' else name != 'disabled'}
 
 
 def provider_name():
-    name = os.environ.get('MATH_PUBLIC_TRANSLATION_PROVIDER', '').strip()
+    name = os.environ.get('MATH_PUBLIC_TRANSLATION_PROVIDER')
+    if name is None:
+        name = 'argos' if argos_runtime.ready() else ''
+    name = name.strip()
+    if name == 'argos':
+        return name
     if name == 'legacy-google':
         return name
     if name == 'libretranslate':
@@ -72,6 +80,11 @@ def provider_name():
 def translate(text, target, legacy):
     """Adapters share one plain-text interface. Only called after saved opt-in."""
     name = provider_name()
+    if name == 'argos':
+        try:
+            return argos_runtime.translate(text,target)
+        except argos_runtime.ArgosError as ex:
+            raise TranslationError(str(ex),503) from None
     if name == 'legacy-google':
         return legacy(text, 'zh-CN' if target == 'zh' else 'en')
     if name != 'libretranslate':
@@ -101,11 +114,17 @@ def translate(text, target, legacy):
 
 
 # Protect entire math/code/URL spans; never interpolate a student's private data.
-PROTECTED = re.compile(r'```[\s\S]*?```|`[^`\n]+`|\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|https?://[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]+|\b[A-Za-z][\w]*(?:\([^\n=]*?\))?\s*=\s*[^\n,;。]+|\b[A-Z]{2,}\b')
+PROTECTED = re.compile(r'```[\s\S]*?```|`[^`\n]+`|\$\$[\s\S]*?\$\$|\$[^$\n]+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|https?://[^\s<>。；，！？、]+|[\w.+-]+@[\w.-]+\.[A-Za-z]+|\b[A-Za-z][\w]*(?:\([^\n=]*?\))?\s*=\s*[^\n,;。]+|\b[A-Z]{2,}\b')
+
+
+# Conservative plain-text arithmetic protection in addition to delimited LaTeX.
+ATOM = r'(?:\d+(?:\.\d+)?[A-Za-z]?|[A-Za-z](?:_\{?[A-Za-z0-9]+\}?|[²³])?)'
+INLINE_MATH = re.compile(r'(?<!\w)'+ATOM+r'(?:[ \t]*[+*/^=×÷≤≥≠±−-][ \t]*(?:'+ATOM+r'|\([^\n)]+\)))+')
+LATEX_COMMAND = re.compile(r'\\[A-Za-z]+(?:\[[^\]\n]*\])?(?:\{(?:[^{}\n]|\{[^{}\n]*\})*\})*')
 
 
 def protected_spans(text, terms):
-    spans = [(m.start(), m.end()) for m in PROTECTED.finditer(text)]
+    spans = [(m.start(),m.end()) for pattern in (PROTECTED,INLINE_MATH,LATEX_COMMAND) for m in pattern.finditer(text)]
     # Capitalized proper-name phrases plus explicit names supplied by the teacher.
     terms = [*terms, *re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b', text)]
     for term in terms:

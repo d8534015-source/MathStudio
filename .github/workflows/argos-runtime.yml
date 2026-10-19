@@ -1,0 +1,60 @@
+name: Argos OWNER Python 3.13 compatibility
+on:
+  pull_request:
+    branches: ['codex/website-integration-v4166']
+    paths:
+      - 'argos_*.py'
+      - 'public_translations.py'
+      - 'test_argos_offline.py'
+      - 'diagnose_argos.py'
+      - 'verify_argos_models.py'
+      - 'packaging/argos/**'
+      - '.github/workflows/argos-runtime.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: argos-runtime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows-runtime:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+          architecture: x64
+      - name: Install optional hash-locked OWNER CPU stack
+        shell: pwsh
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: --extra-index-url https://download.pytorch.org/whl/cpu -r packaging/argos/requirements-windows-py313.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m pip install --require-hashes --only-binary=:all: -r requirements.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -m pip check
+      - name: Fetch only official hash-pinned MiniSBD sentence models
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; import argos_setup; base=Path('.ci-models').resolve(); [argos_setup.sentence_model(base,pair) for pair in ('en_zh','zh_en')]"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Focused regressions with genuine sentence models; no translation model downloads or installer rebuild
+        env:
+          MATH_ARGOS_TEST_SBD_DIR: '${{ github.workspace }}/.ci-models/downloads/minisbd-v0.0.1'
+        shell: pwsh
+        run: |
+          python -m unittest test_argos_offline test_public_translations -v 2>&1 | Tee-Object argos-windows-tests.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -c "import platform,sys; from importlib.metadata import version; import ctranslate2,stanza,spacy,sentencepiece; print(platform.platform(), sys.version); print({n:version(n) for n in ['argostranslate','ctranslate2','stanza','spacy','torch','sentencepiece']})" | Tee-Object argos-windows-runtime.txt
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: argos-windows-python313-evidence
+          path: |
+            argos-windows-tests.txt
+            argos-windows-runtime.txt
+          if-no-files-found: warn

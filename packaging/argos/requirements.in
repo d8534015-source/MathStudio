@@ -1,0 +1,8 @@
+argostranslate==1.11.0
+ctranslate2==4.8.3
+sentencepiece==0.2.2
+stanza==1.10.1
+spacy==3.8.16
+minisbd==0.9.5
+torch==2.14.1+cpu
+opencc-python-reimplemented==0.1.7

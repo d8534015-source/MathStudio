@@ -840,7 +840,21 @@ export const EN={
   "diagnostics.detail": "The main JavaScript module did not start. Try Ctrl+Shift+R once, then copy the message below if it remains.",
   "translation.disabled": "Disabled",
   "media.other_device": "On another device, use the OWNER server’s HTTPS classroom link. A local HTTP address such as {0} is not a secure browser origin.",
-  "ui.example_group_description": "Example: Linear equations review and contest-style practice"
+  "ui.example_group_description": "Example: Linear equations review and contest-style practice",
+  "translation.offline_privacy": "Argos translates these public descriptions locally on OWNER. No text is sent to an external service. Drafts remain private until you approve them.",
+  "translation.offline_opt_in": "Enable free offline automatic translation",
+  "translation.offline_regenerate": "Regenerate draft offline",
+  "translation.offline_unavailable": "Offline models are unavailable. Ask the OWNER operator to run SETUP OFFLINE TRANSLATION.bat with OWNER stopped. Originals remain visible.",
+  "translation.working": "Processing translation… You can continue using other pages.",
+  "error.argos_1": "Offline translation models are unavailable. Run OWNER offline translation setup.",
+  "error.argos_2": "Offline translation is busy. Try again shortly.",
+  "error.argos_3": "Offline translation timed out. Original content is unchanged.",
+  "error.argos_4": "Offline translation could not start. Run OWNER offline translation setup.",
+  "error.argos_5": "Offline translation failed. Original content is unchanged.",
+  "error.argos_6": "Offline translation result is too large.",
+  "error.argos_7": "Argos storage must be outside the application folder.",
+  "error.argos_8": "Invalid offline translation request.",
+  "error.argos_absolute_path": "Argos storage must use an absolute path."
 };
 export const ZH={
   "ui.media_link_connected_to_1_participant": "媒体连接：已连接 1 位参与者。",
@@ -1683,7 +1697,21 @@ export const ZH={
   "diagnostics.detail": "主脚本模块未启动。请按一次 Ctrl+Shift+R；若仍有问题，请复制下方诊断信息。",
   "translation.disabled": "未启用",
   "media.other_device": "在其他设备上，请使用 OWNER 服务器的 HTTPS 课堂链接。本地 HTTP 地址（例如 {0}）不是安全的浏览器来源。",
-  "ui.example_group_description": "例如：一次方程复习和竞赛题练习"
+  "ui.example_group_description": "例如：一次方程复习和竞赛题练习",
+  "translation.offline_privacy": "Argos 在 OWNER 本地翻译这些公开描述，不向外部服务发送文字。草稿经您批准后才会公开。",
+  "translation.offline_opt_in": "启用免费离线自动翻译",
+  "translation.offline_regenerate": "离线重新生成草稿",
+  "translation.offline_unavailable": "离线模型不可用。请让 OWNER 管理员先停止服务器，再运行 SETUP OFFLINE TRANSLATION.bat。仍会显示原文。",
+  "translation.working": "正在处理译文… 您仍可使用其他页面。",
+  "error.argos_1": "离线翻译模型不可用，请运行 OWNER 离线翻译设置。",
+  "error.argos_2": "离线翻译繁忙，请稍后重试。",
+  "error.argos_3": "离线翻译超时，原文未更改。",
+  "error.argos_4": "离线翻译无法启动，请运行 OWNER 离线翻译设置。",
+  "error.argos_5": "离线翻译失败，原文未更改。",
+  "error.argos_6": "离线翻译结果过大。",
+  "error.argos_7": "Argos 存储位置必须在应用文件夹之外。",
+  "error.argos_8": "离线翻译请求无效。",
+  "error.argos_absolute_path": "Argos 存储位置必须使用绝对路径。"
 };
 export const KEYS={
   "Media link: connected to 1 participant.": "ui.media_link_connected_to_1_participant",
@@ -2525,5 +2553,19 @@ export const KEYS={
   "The main JavaScript module did not start. Try Ctrl+Shift+R once, then copy the message below if it remains.": "diagnostics.detail",
   "Disabled": "translation.disabled",
   "On another device, use the OWNER server’s HTTPS classroom link. A local HTTP address such as {0} is not a secure browser origin.": "media.other_device",
-  "Example: Linear equations review and contest-style practice": "ui.example_group_description"
+  "Example: Linear equations review and contest-style practice": "ui.example_group_description",
+  "Argos translates these public descriptions locally on OWNER. No text is sent to an external service. Drafts remain private until you approve them.": "translation.offline_privacy",
+  "Enable free offline automatic translation": "translation.offline_opt_in",
+  "Regenerate draft offline": "translation.offline_regenerate",
+  "Offline models are unavailable. Ask the OWNER operator to run SETUP OFFLINE TRANSLATION.bat with OWNER stopped. Originals remain visible.": "translation.offline_unavailable",
+  "Processing translation… You can continue using other pages.": "translation.working",
+  "Offline translation models are unavailable. Run OWNER offline translation setup.": "error.argos_1",
+  "Offline translation is busy. Try again shortly.": "error.argos_2",
+  "Offline translation timed out. Original content is unchanged.": "error.argos_3",
+  "Offline translation could not start. Run OWNER offline translation setup.": "error.argos_4",
+  "Offline translation failed. Original content is unchanged.": "error.argos_5",
+  "Offline translation result is too large.": "error.argos_6",
+  "Argos storage must be outside the application folder.": "error.argos_7",
+  "Invalid offline translation request.": "error.argos_8",
+  "Argos storage must use an absolute path.": "error.argos_absolute_path"
 };
