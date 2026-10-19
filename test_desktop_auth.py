@@ -121,6 +121,16 @@ class RememberTests(BackendCase):
         self.app.SESSIONS.clear()
         self.assertEqual(self.request('/api/desktop/refresh',payload,self.client())[0],200)
 
+    def test_password_reset_does_not_leave_device_capacity_exhausted(self):
+        with self.app.db() as c:
+            user=c.execute("SELECT * FROM users WHERE username='teacher'").fetchone()
+            for _ in range(10):owner_auth.issue(c,user,'a'*64)
+            c.execute('UPDATE users SET password=? WHERE id=?',(self.app.hash_password('synthetic-new-password-456'),user['id']))
+        state=self.client()
+        self.assertEqual(self.request('/api/login',{'username':'teacher','password':'synthetic-new-password-456'},state)[0],200)
+        self.assertEqual(self.request('/api/desktop/remember',{'password':'synthetic-new-password-456','device':'b'*64},state)[0],200)
+        with self.app.db() as c:self.assertEqual(c.execute('SELECT COUNT(*) FROM desktop_credentials').fetchone()[0],1)
+
     def test_password_role_expiration_and_wrong_device_revoke(self):
         for change in ('password','role','expires','idle','device'):
             with self.subTest(change=change):

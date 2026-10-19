@@ -751,7 +751,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "bc18af135577bbdbbada81eda618e1d84277151d3c7160dc73f7bbe972f37983"
+      "sha256": "c07d2a5d679bf4c8d03d17adc3bda74fd2e60287bfb46f34099d5e898ac384ba"
     },
     "desktop_credentials.py": {
       "packages": [
@@ -764,7 +764,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "912e644a54d35c763bc13ce989f99235f29610a05af6d08ee6cbd10709dae504"
+      "sha256": "c80a0fc56a183d7e4318ae479fe1f3270edb7f417b3f3b0983eb098ccf7cfeb1"
     },
     "PR9_PAIRING_REVIEW.md": {
       "packages": [

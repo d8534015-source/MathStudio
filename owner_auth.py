@@ -46,6 +46,10 @@ def initialized(connection):
 def issue(connection, user, device):
     now = time.time()
     connection.execute('DELETE FROM desktop_credentials WHERE expires<=? OR idle<=?', (now, now))
+    # Password-reset devices are already unauthorized; do not let their stale
+    # rows exhaust the device limit and block a freshly authenticated teacher.
+    connection.execute('DELETE FROM desktop_credentials WHERE user_id=? AND password_stamp<>?',
+                       (user['id'],digest(user['password'])))
     count = connection.execute('SELECT COUNT(*) FROM desktop_credentials WHERE user_id=?', (user['id'],)).fetchone()[0]
     if count >= 10:
         raise ValueError('Too many remembered devices. Sign out on another device first.')
