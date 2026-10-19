@@ -11,6 +11,28 @@ def deny_network(*args, **kwargs):
     raise OSError('Network is disabled during offline translation.')
 
 
+def sentencepiece_failure(error):
+    # Native exception messages can contain paths and input text. Emit only
+    # fixed labels for known SentencePiece/pybind failure categories.
+    message=str(error)
+    status=re.match(r'^(INTERNAL|INVALID_ARGUMENT|NOT_FOUND|DATA_LOSS|FAILED_PRECONDITION|UNIMPLEMENTED|OUT_OF_RANGE|RESOURCE_EXHAUSTED):',message)
+    labels=['sp_status='+status[1]] if status else []
+    location=re.search(r'\b(sentencepiece_processor|normalizer|model_interface|unigram_model|bpe_model|char_model|word_model)\.cc\((\d{1,6})\)',message)
+    if location:labels.append('sp_native='+location[1]+':'+location[2])
+    reasons=(('Unable to cast Python instance','python_cpp_cast'),
+             ('Input must be str or bytes','input_type'),
+             ('List elements must be str or bytes','input_type'),
+             ('invalid UTF-8','invalid_utf8'),('Invalid UTF-8','invalid_utf8'),
+             ('could not parse ModelProto','model_proto'),
+             ('Model is not initialized','model_not_initialized'),
+             ('unk is not defined','missing_unk'),
+             ('Vocabulary size is 0','empty_vocabulary'),
+             ('BOS token is not defined','missing_bos'),
+             ('EOS token is not defined','missing_eos'))
+    reason=next((label for fragment,label in reasons if fragment in message),'unclassified')
+    return labels+['sp_reason='+reason]
+
+
 def safe_diagnostic(error):
     """Code locations and error types only: never exception text, paths or locals."""
     details=[];seen=set()
@@ -25,13 +47,15 @@ def safe_diagnostic(error):
         for key in ('errno','winerror'):
             value=getattr(error,key,None)
             if type(value) is int:details.append(key+'='+str(value))
-        frames=[];tb=error.__traceback__
+        frames=[];tb=error.__traceback__;sentencepiece_frame=False
         while tb is not None:
             module=tb.tb_frame.f_globals.get('__name__','')
+            sentencepiece_frame=sentencepiece_frame or module=='sentencepiece' or module.startswith('sentencepiece.')
             function=tb.tb_frame.f_code.co_name
             if re.fullmatch(r'[A-Za-z_][A-Za-z_0-9.]{0,119}',module) and re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]{0,79}',function):
                 frames.append(module+'.'+function+':'+str(tb.tb_lineno))
             tb=tb.tb_next
+        if sentencepiece_frame:details.extend(sentencepiece_failure(error))
         details.extend('at='+frame for frame in frames[-4:])
         error=error.__cause__ if error.__cause__ is not None else (None if error.__suppress_context__ else error.__context__)
     return '; '.join(details)[:1500]
@@ -40,6 +64,37 @@ def safe_diagnostic(error):
 def profile():
     from pathlib import Path
     return json.loads((Path(__file__).resolve().parent/'packaging'/'argos'/'profile.json').read_text(encoding='utf-8'))
+
+
+def inspect_tokenizer(pkg):
+    # Fixed public test inputs only. No token values, model paths, vocabulary
+    # entries or arbitrary exception messages enter this diagnostic report.
+    from argostranslate.tokenizer import SentencePieceTokenizer
+    tokenizer=pkg.tokenizer
+    if not isinstance(tokenizer,SentencePieceTokenizer):return {'type':'other','status':'unsupported_probe'}
+    report={'type':'sentencepiece','status':'failed','probes':[]}
+    try:
+        processor=tokenizer.lazy_processor()
+        report['vocabulary_size']=processor.get_piece_size()
+    except Exception as error:
+        report['phase']='load';report['diagnostic']=safe_diagnostic(error);return report
+    samples=['我们一起学习数学。','我们解一个方程。'] if pkg.from_code=='zh' else ['We learn mathematics together.','We solve an equation.']
+    for api in ('argos_str','utf8_bytes','str_ids'):
+        for index,text in enumerate(samples):
+            item={'api':api,'sample':index+1}
+            try:
+                if api=='argos_str':tokens=tokenizer.encode(text)
+                else:tokens=processor.encode(text.encode('utf-8') if api=='utf8_bytes' else text,out_type=str if api=='utf8_bytes' else int)
+                expected=str if api!='str_ids' else int
+                valid=isinstance(tokens,list) and bool(tokens) and all(type(token) is expected for token in tokens)
+                item['status']='passed' if valid else 'invalid_output'
+                item['token_count']=len(tokens) if isinstance(tokens,list) else None
+            except Exception as error:
+                item['status']='failed';item['diagnostic']=safe_diagnostic(error)
+            report['probes'].append(item)
+    report['phase']='encode'
+    if all(item['status']=='passed' for item in report['probes']):report['status']='passed'
+    return report
 
 
 def offline_environment():
@@ -61,7 +116,8 @@ def inspect_models(packages,versions):
     result=[]
     known_features={'space_before','capitalized','all_caps','numeric','start_of_para','end_of_para'}
     for pkg in packages:
-        item={'from':pkg.from_code,'to':pkg.to_code,'version':str(pkg.package_version)}
+        item={'from':pkg.from_code,'to':pkg.to_code,'version':str(pkg.package_version),
+              'tokenizer':inspect_tokenizer(pkg)}
         resources=pkg.package_path/'stanza'/'resources.json'
         if resources.is_file() and resources.stat().st_size<2*1024**2:
             data=json.loads(resources.read_text(encoding='utf-8'))

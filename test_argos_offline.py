@@ -144,6 +144,60 @@ class RuntimeTests(unittest.TestCase):
             with mock.patch.object(ar.subprocess,'run',side_effect=run):
                 self.assertEqual(ar.translate('Learn '+token+' today.','zh'),'学习 '+token+' 今天。')
 
+    @unittest.skipUnless(importlib.util.find_spec('sentencepiece'),'Optional installed SentencePiece runtime required')
+    def test_real_sentencepiece_unicode_probes_and_native_error_are_safe(self):
+        import sentencepiece as sp
+        from argostranslate.tokenizer import SentencePieceTokenizer
+        from types import SimpleNamespace
+        texts=['我们一起学习数学。','我们解一个方程。','We learn mathematics together.','We solve an equation.']
+        model=io.BytesIO()
+        sp.SentencePieceTrainer.train(sentence_iterator=iter(texts*10),model_writer=model,
+            vocab_size=80,hard_vocab_limit=False,num_threads=1,minloglevel=2)
+        path=Path(self.temp.name)/'中文-tokenizer.model';path.write_bytes(model.getvalue())
+        with mock.patch('socket.create_connection',side_effect=AssertionError('No network')):
+            for source in ('en','zh'):
+                tokenizer=SentencePieceTokenizer(path)
+                report=worker.inspect_tokenizer(SimpleNamespace(tokenizer=tokenizer,from_code=source))
+                self.assertEqual(report['status'],'passed');self.assertEqual(report['phase'],'encode')
+                self.assertEqual(len(report['probes']),6)
+                for text in texts:
+                    self.assertEqual(tokenizer.encode(text),tokenizer.lazy_processor().encode(text.encode('utf-8'),out_type=str))
+                encoded=json.dumps(report)
+                for private in [str(path),'中文-tokenizer',*texts]:self.assertNotIn(private,encoded)
+        processor=sp.SentencePieceProcessor()
+        try:processor.encode(texts[0],out_type=str)
+        except RuntimeError as error:
+            diagnostic=worker.safe_diagnostic(error)
+        else:self.fail('Uninitialized processor must fail')
+        self.assertIn('sp_status=INTERNAL',diagnostic)
+        self.assertIn('sp_reason=model_not_initialized',diagnostic)
+        self.assertRegex(diagnostic,r'sp_native=sentencepiece_processor:\d+')
+        self.assertNotIn(texts[0],diagnostic)
+
+    @unittest.skipUnless(importlib.util.find_spec('sentencepiece'),'Optional installed SentencePiece runtime required')
+    def test_tokenizer_probe_failure_does_not_expose_details_or_repair_tokenizer(self):
+        from argostranslate.tokenizer import SentencePieceTokenizer
+        from types import SimpleNamespace
+        tokenizer=SentencePieceTokenizer(Path(self.temp.name)/'private-model')
+        processor=mock.Mock()
+        processor.get_piece_size.return_value=100
+        # Simulate the library frame, preserving its error category but never its text.
+        namespace={'__name__':'sentencepiece'}
+        exec('def fail(*args,**kwargs):\n raise RuntimeError("INTERNAL: Unable to cast Python instance private-path private-student")',namespace)
+        processor.encode.side_effect=namespace['fail'];tokenizer.processor=processor
+        report=worker.inspect_tokenizer(SimpleNamespace(tokenizer=tokenizer,from_code='zh'))
+        self.assertEqual(report['status'],'failed');self.assertEqual(len(report['probes']),6)
+        self.assertTrue(all(item['status']=='failed' for item in report['probes']))
+        encoded=json.dumps(report)
+        self.assertIn('sp_reason=python_cpp_cast',encoded);self.assertIn('sp_status=INTERNAL',encoded)
+        for private in ['private-path','private-student',str(self.temp.name)]:self.assertNotIn(private,encoded)
+        self.assertIs(tokenizer.processor,processor)
+        processor.encode.assert_called();self.assertEqual(processor.encode.call_count,6)
+        for message,reason in [('INTERNAL: unk is not defined. private-path','missing_unk'),
+                               ('INTERNAL: private-path private-student','unclassified')]:
+            labels=worker.sentencepiece_failure(RuntimeError(message))
+            self.assertIn('sp_reason='+reason,labels);self.assertNotIn('private-path',' '.join(labels))
+
     def test_timeout_busy_and_bad_output_release_single_worker_slot(self):
         self.ready_files()
         with mock.patch.object(ar,'run_worker',side_effect=subprocess.TimeoutExpired('synthetic',30)):
