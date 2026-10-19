@@ -148,12 +148,30 @@ def run(payload):
     return {'pieces':result}
 
 
-if __name__=='__main__':
+def main():
     try:
-        payload=json.loads(sys.stdin.read(100001))
-        with contextlib.redirect_stdout(sys.stderr):result=run(payload)
-        print(json.dumps(result,ensure_ascii=False))
+        # Keep a dedicated protocol pipe. redirect_stdout alone cannot redirect
+        # C/C++ writes to fd 1 or Windows DLLs using GetStdHandle(STD_OUTPUT_HANDLE).
+        with os.fdopen(os.dup(sys.stdout.fileno()),'wb') as protocol:
+            sys.stdout.flush()
+            os.dup2(sys.stderr.fileno(),sys.stdout.fileno())
+            if os.name=='nt':
+                import ctypes
+                import msvcrt
+                setter=ctypes.WinDLL('kernel32',use_last_error=True).SetStdHandle
+                setter.argtypes=(ctypes.c_uint32,ctypes.c_void_p);setter.restype=ctypes.c_int
+                if not setter(0xfffffff5,msvcrt.get_osfhandle(sys.stderr.fileno())):
+                    raise OSError('Cannot isolate worker protocol output')
+            payload=json.loads(sys.stdin.read(100001))
+            with contextlib.redirect_stdout(sys.stderr):result=run(payload)
+            protocol.write(json.dumps(result,ensure_ascii=False).encode('utf-8')+b'\n')
+            protocol.flush()
+        return 0
     except Exception as error:
         # Setup reads only this safe record. Browser inference discards all stderr.
-        print('ARGOS_DIAGNOSTIC '+safe_diagnostic(error),file=sys.stderr,flush=True)
-        sys.exit(2)
+        print('\nARGOS_DIAGNOSTIC '+safe_diagnostic(error),file=sys.stderr,flush=True)
+        return 2
+
+
+if __name__=='__main__':
+    sys.exit(main())

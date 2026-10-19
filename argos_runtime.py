@@ -74,6 +74,22 @@ def environment(base):
     return env
 
 
+def worker_json(data):
+    # Protocol output is UTF-8 only. Never repair corrupt JSON with replacement.
+    return json.loads(data.decode('utf-8'))
+
+
+def worker_diagnostic(data):
+    # Native Windows diagnostics may use an ANSI codepage. Decode lossily only
+    # on this non-protocol channel, then retain the sanitized ASCII record only.
+    notes=[]
+    for line in (data or b'').decode('utf-8',errors='replace').splitlines():
+        if line.startswith('ARGOS_DIAGNOSTIC '):
+            value=line.removeprefix('ARGOS_DIAGNOSTIC ')
+            if re.fullmatch(r'[A-Za-z0-9_.:=; -]{1,1500}',value):notes.append(value)
+    return notes[-1] if notes else 'No safe exception record; confirm argos_worker.py is updated.'
+
+
 def translate(text, target):
     if target not in ('en', 'zh') or not isinstance(text, str) or len(text) > 20000:
         raise ArgosError('Invalid offline translation request.')
@@ -90,7 +106,7 @@ def translate(text, target):
             options['creationflags'] = subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS
         try:
             result = subprocess.run([str(python_path()), '-I', '-u', str(ROOT/'argos_worker.py')],
-                input=json.dumps(payload,ensure_ascii=False),encoding='utf-8',stdout=subprocess.PIPE,
+                input=json.dumps(payload,ensure_ascii=False).encode('utf-8'),stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,timeout=TIMEOUT,cwd=str(home()),env=environment(home()),**options)
         except subprocess.TimeoutExpired:
             raise ArgosError('Offline translation timed out. Original content is unchanged.') from None
@@ -99,7 +115,7 @@ def translate(text, target):
         if result.returncode or len(result.stdout) > 150000:
             raise ArgosError('Offline translation failed. Original content is unchanged.')
         try:
-            translated = json.loads(result.stdout)['pieces']
+            translated = worker_json(result.stdout)['pieces']
             if not isinstance(translated,list) or len(translated) != len(pieces[::2]) or any(not isinstance(x,str) or len(x)>20000 for x in translated):
                 raise ValueError()
         except (ValueError, KeyError, TypeError):

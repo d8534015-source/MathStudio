@@ -6,7 +6,6 @@ import json
 import os
 import platform
 from pathlib import Path, PurePosixPath
-import re
 import shutil
 import socket
 import struct
@@ -151,7 +150,7 @@ def self_test(base,packages):
         prefix='Offline model self-test failed ('+pair+'). No new models were activated. '
         try:
             result=subprocess.run([str(argos_runtime.python_path()),'-I','-u',str(ROOT/'argos_worker.py')],
-                input=json.dumps({'target':target,'pieces':texts}),encoding='utf-8',stdout=subprocess.PIPE,
+                input=json.dumps({'target':target,'pieces':texts},ensure_ascii=False).encode('utf-8'),stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,timeout=argos_runtime.TIMEOUT,cwd=base,env=env)
         except subprocess.TimeoutExpired:
             raise RuntimeError(prefix+'Worker exceeded the '+str(argos_runtime.TIMEOUT)+'-second deadline.') from None
@@ -160,11 +159,9 @@ def self_test(base,packages):
             raise RuntimeError(prefix+'Worker could not start: '+type(error).__name__+codes) from None
         if result.returncode:
             # Libraries can log paths or input text. Only our sanitized record is printable.
-            notes=[line.removeprefix('ARGOS_DIAGNOSTIC ') for line in result.stderr.splitlines() if line.startswith('ARGOS_DIAGNOSTIC ')]
-            detail=notes[-1] if notes and re.fullmatch(r'[A-Za-z0-9_.:=; -]{1,1500}',notes[-1]) else 'No safe exception record; confirm argos_worker.py is updated.'
-            raise RuntimeError(prefix+'Worker exit='+str(result.returncode)+'. '+detail)
+            raise RuntimeError(prefix+'Worker exit='+str(result.returncode)+'. '+argos_runtime.worker_diagnostic(result.stderr))
         try:
-            values=json.loads(result.stdout)['pieces']
+            values=argos_runtime.worker_json(result.stdout)['pieces']
             if not isinstance(values,list) or len(values)!=2 or any(not isinstance(x,str) or len(x)>20000 for x in values):
                 raise ValueError()
             translated=values[0]

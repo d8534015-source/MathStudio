@@ -27,14 +27,12 @@ def main():
                 report['archives']=setup.prepare_models(base,packages,args.model_files,args.sbd_files,allow_download=False)
             env=runtime.environment(base);env['ARGOS_PACKAGES_DIR']=str(packages)
             result=subprocess.run([str(runtime.python_path()),'-I','-u',str(setup.ROOT/'argos_worker.py')],
-                input=json.dumps({'operation':'inspect'}),encoding='utf-8',capture_output=True,
+                input=json.dumps({'operation':'inspect'}).encode('utf-8'),capture_output=True,
                 timeout=runtime.TIMEOUT,cwd=base,env=env)
             if result.returncode:
-                notes=[x for x in result.stderr.splitlines() if x.startswith('ARGOS_DIAGNOSTIC ')]
-                import re
-                report['worker_failure']=notes[-1] if notes and re.fullmatch(r'[A-Za-z0-9_.:=; -]{1,1600}',notes[-1]) else 'No safe worker record'
+                report['worker_failure']=runtime.worker_diagnostic(result.stderr)
                 raise RuntimeError('Inspection worker failed')
-            report['inspection']=json.loads(result.stdout)
+            report['inspection']=runtime.worker_json(result.stdout)
             with contextlib.redirect_stdout(io.StringIO()):report['examples']=setup.self_test(base,packages)
             report['status']='passed_staged_real_models'
     except Exception as error:
