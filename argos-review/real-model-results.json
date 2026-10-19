@@ -1,5 +1,7 @@
 {
   "status": "blocked_missing_models",
   "examples": [],
-  "reason": "Install and verify both real Argos models with OWNER setup first. No real translations were executed."
+  "reason": "No genuine Argos translation archives are present; official argos-net.com host is outside Cloud policy. No retry, mirror or allowlist change attempted.",
+  "sentence_splitting": "Real official MiniSBD English and Chinese sentence splitting passed; this is not translation acceptance.",
+  "windows_acceptance": "Run diagnose_argos.py and verify_argos_models.py with existing original models using the updated OWNER package."
 }

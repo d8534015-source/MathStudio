@@ -1,44 +1,72 @@
 {
-  "python": "3.13.5",
-  "platform": "Linux x86_64",
-  "dependency_consistency": "65 optional Argos packages compatible; existing 3 application packages installed for API tests",
-  "principal_versions": {
-    "argostranslate": "1.11.0",
-    "ctranslate2": "4.8.3",
-    "stanza": "1.10.1",
-    "sentencepiece": "0.2.2",
-    "spacy": "3.8.16",
-    "torch": "2.14.1+cpu",
-    "opencc-python-reimplemented": "0.1.7"
+  "profile": "argos111-minisbd095-v1",
+  "runtime_inspection": {
+    "python": "3.13.5",
+    "profile": "argos111-minisbd095-v1",
+    "versions": {
+      "argostranslate": "1.11.0",
+      "ctranslate2": "4.8.3",
+      "sentencepiece": "0.2.2",
+      "minisbd": "0.9.5",
+      "onnxruntime": "1.31.0",
+      "stanza": "1.10.1",
+      "spacy": "3.8.16",
+      "torch": "2.14.1+cpu",
+      "opencc-python-reimplemented": "0.1.7"
+    },
+    "models": [],
+    "compatible_runtime": true,
+    "configuration": {
+      "device": "cpu",
+      "chunk_type": "MINISBD",
+      "provider": "OPENNMT"
+    }
   },
-  "windows_resolution": "CPython 3.13 x64 wheel-only hash-locked dependency resolution passed",
-  "real_models": "blocked: Cloud proxy denies argos-net.com; no actual model examples executed",
-  "physical_windows11": "not executed",
-  "focused_tests": {
-    "python312": 19,
-    "python313": 19,
+  "locks": "unchanged; 65 Linux / 66 Windows pinned optional packages",
+  "targeted_python313": {
+    "tests": 27,
     "failures": 0,
-    "python312_seconds": 2.059,
-    "python313_seconds": 4.624,
-    "scope": "after final Windows archive path validation fix"
+    "skipped": 0,
+    "seconds": 6.452
   },
-  "full_suite": {
-    "tests": 122,
-    "failures": 0,
-    "seconds": 16.068,
-    "previous_tests_preserved": 111
+  "genuine_sentence_models": {
+    "status": "passed",
+    "cpu_only": true,
+    "repeated_inference": true,
+    "en": [
+      "We learn mathematics.",
+      "We solve an equation."
+    ],
+    "zh": [
+      "我们学习数学。",
+      "我们解一个方程。"
+    ],
+    "note": "Sentence splitting only; no actual Argos translation executed."
   },
   "windows_ci": {
     "status": "passed",
+    "run_url": "https://github.com/d8534015-source/MathStudio/actions/runs/39185599841",
     "platform": "Windows Server 2025 x64",
     "python": "3.13.16",
-    "focused_tests": 19,
-    "seconds": 17.927,
-    "hash_locked_install": "passed",
-    "pip_check": "passed",
-    "actual_dependency_imports": "passed",
-    "models": "not installed or invoked",
-    "run_url": "https://github.com/d8534015-source/MathStudio/actions/runs/39177916641",
-    "code_commit": "f82a97d4d9316eeae705e9e05dfccddeaaa16731"
+    "tests": 27,
+    "failures": 0,
+    "skipped": 0,
+    "seconds": 53.57,
+    "genuine_sentence_models": "passed",
+    "translation_models": "not downloaded or executed"
+  },
+  "full_suite": {
+    "status": "passed",
+    "tests": 130,
+    "failures": 0,
+    "skipped": 0,
+    "seconds": 22.092,
+    "python": "3.13.5",
+    "previous_regressions_preserved": 111
+  },
+  "node_workflows": {
+    "tests": 15,
+    "failures": 0,
+    "skipped": 0
   }
 }

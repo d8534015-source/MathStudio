@@ -6,9 +6,9 @@
     "asset_version": "41_6_6_delivery1"
   },
   "parent_commit": "cffa6c8f9fce828c6530b3ce123c688b386b54c1",
-  "status": "OWNER Argos offline review candidate; real models blocked by Cloud network policy and Windows 11 model acceptance pending. Existing teacher installer unchanged.",
+  "status": "OWNER Argos supported MiniSBD review candidate; real sentence inference verified, complete translation and Windows 11 acceptance pending.",
   "folders": {
-    "owner": "MathStudio_v41_6_6_OWNER_Argos_Review_Candidate",
+    "owner": "MathStudio_v41_6_6_OWNER_Argos_MiniSBD_Review_Candidate",
     "teacher": "MathStudio_v41_6_6_TEACHER_READY_Delivery_Candidate"
   },
   "runtime": {
@@ -25,9 +25,10 @@
         "packaging/argos/requirements-windows-py313.txt",
         "packaging/argos/requirements-linux-py313.txt"
       ],
-      "verified": "Python 3.13.5 Linux dependency imports and 19 focused tests; Windows Server 2025 Python 3.13.16 imports and 19 focused tests",
-      "models": "Not installed or tested in Cloud; explicit OWNER setup must verify both directions before activation",
-      "storage": "External MathStudio per-user translation directory; never packaged"
+      "verified": "Full suite 130/130 on Python 3.13.5 Linux; 27 focused tests with genuine sentence models on Linux and Windows Server/Python 3.13.16; full translation/Windows 11 acceptance pending",
+      "models": "Original official Argos 1.9 archives plus hash-pinned upstream MiniSBD sentence models; only real bidirectional checks activate",
+      "storage": "External MathStudio per-user translation directory; never packaged",
+      "profile": "packaging/argos/profile.json"
     }
   },
   "excluded": [
@@ -580,19 +581,19 @@
       "packages": [
         "owner"
       ],
-      "sha256": "91dd05cb899e58d9dfac21989cc5485292ef12688eeedb8dea383d02462e25af"
+      "sha256": "0a96d989bc51a881825c8a004f275b31e8b99cf0d0f35d6c627a92215a2e311e"
     },
     "argos_worker.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "230c097fa5b43e8bf0e08196e7be385a04df7024ff6f4426f6efd9ea378ee5d3"
+      "sha256": "5e5f075affafcbe4a58d3dd3417b9e442b90dad1886cb51224ff27238fd32b97"
     },
     "argos_setup.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "9386c209e8cc7b1ef7517a9404b1762dfc0e85072d5412d83d5f006ad225a3f7"
+      "sha256": "8b6f08f32285fed6347a7df3736fb891c1663c00c551f71269f4ff1f85f83fef"
     },
     "SETUP OFFLINE TRANSLATION.bat": {
       "packages": [
@@ -604,19 +605,19 @@
       "packages": [
         "owner"
       ],
-      "sha256": "8a2853829a9968b88372fd54148e0bdcb3bb3578fb1681a423e3cba53235e2d3"
+      "sha256": "b80bc3a61abb40074def4d171cde01ce8e26ab8dd195d8373ed8bb83a8e39763"
     },
     "test_argos_offline.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "222c61f918f613f08285e149c579bbacccf6c3da7e5b223dc59142a7e19d99cb"
+      "sha256": "1b56fc6461354a9a6645c3878cab96488eb3ef8eea768083292d95ed5c3d9042"
     },
     "verify_argos_models.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "d0dd82071a67292d75cb95d42cd9aa443ebf7fe3350213aaef6c9b68e0fa673e"
+      "sha256": "b50bfbfe18c332e66b5bc3fc7dbd12cf544e71a6de2576a4a425d0c41fdafc27"
     },
     "packaging/argos/requirements.in": {
       "packages": [
@@ -640,25 +641,43 @@
       "packages": [
         "owner"
       ],
-      "sha256": "1e2e7865689ee2cbabcfbcb853715c29ca15d20bc5195a2aeb7c28d8c42c4950"
+      "sha256": "dfb65b529e73f912fe8e58a860912f8128c66499690d385e7f08a8d22ac99d71"
     },
     "argos-review/TEST_RESULTS.md": {
       "packages": [
         "owner"
       ],
-      "sha256": "279b718f608a4b7d9bfa7ee07f66731143ca6ff877c3ff507a551bd828f89c99"
+      "sha256": "ebe4162e4aa790a9b6e2a7300a712831798219c3bf7ee249777f890494cce569"
     },
     "argos-review/dependency-results.json": {
       "packages": [
         "owner"
       ],
-      "sha256": "8f6976e1e48e4892ae606731d2ab93d2b0f14c3ac1ef8f96463f3174eacd68e6"
+      "sha256": "c3599c61f7e2d8ccbe4d5979bed0abd20db28e2d05dcd0997f5ed0d1a294dd75"
     },
     "argos-review/real-model-results.json": {
       "packages": [
         "owner"
       ],
-      "sha256": "5c0f76f34a0e6f49eb823343f75412b403e3b3d5a0b66bc17663813ea70bf7bd"
+      "sha256": "9e88649b795da6fd418d8dc4e389511694346142d3222293f87c62900a1409ca"
+    },
+    "diagnose_argos.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "d35b00940d5cf0cd435d480c3897dac91c3679a13361bf9136d0ec5fe4ee0d47"
+    },
+    "packaging/argos/profile.json": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "138a45e155cf06b1666b8bb30c4994175cdff35580fbc7232e71f15d18cc1fae"
+    },
+    "ARGOS_COMPATIBILITY_REVIEW.md": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "60da4328fc446177d727e039168deb63b01f89965d671c9f1ac04f106945e540"
     }
   }
 }

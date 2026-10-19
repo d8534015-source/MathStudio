@@ -1,16 +1,20 @@
 {
-  "artifact": "MathStudio_v41_6_6_OWNER_Argos_Review_Candidate.zip",
+  "artifact": "MathStudio_v41_6_6_OWNER_Argos_MiniSBD_Review_Candidate.zip",
   "status": "passed",
-  "sha256": "211acde5662da86d654276d4cae26dc8697c89093ddf5037838ebfd8d44d8772",
-  "bytes": 491094,
-  "zip_entries": 100,
-  "allowlisted_owner_source_files": 99,
-  "single_top_level_folder": "MathStudio_v41_6_6_OWNER_Argos_Review_Candidate",
-  "zip_crc": "passed",
-  "exact_manifest_file_set_and_bytes": "passed",
-  "private_data_models_wheels_environments_executables": "excluded by explicit allowlist",
-  "teacher_executable": "unchanged; not rebuilt or included in OWNER ZIP",
-  "teacher_executable_sha256": "c05b5e9f160d0c9dddb428128dab1ddd3d87527d5fb6ed7e97094f494d8990cc",
-  "main_merge_deployment": "not performed",
-  "real_models": "unverified; no model files present and official host blocked"
+  "sha256": "9066900d65a37890fcd2f8a19408903412ae46b6ebea4f8fcb7375a416c20ac5",
+  "bytes": 504786,
+  "zip_entries": 103,
+  "allowlisted_owner_source_files": 102,
+  "single_top_level_folder": "MathStudio_v41_6_6_OWNER_Argos_MiniSBD_Review_Candidate",
+  "zip_crc_and_exact_manifest_contents": "passed",
+  "new_components": [
+    "packaging/argos/profile.json",
+    "diagnose_argos.py",
+    "verify_argos_models.py",
+    "ARGOS_COMPATIBILITY_REVIEW.md"
+  ],
+  "models_wheels_environments_private_data_secrets_executables": "excluded by explicit allowlist",
+  "earlier_pr7_ancestry": "preserved",
+  "teacher_executable_classroom_timezone_server_app_dependencies_build_ids": "unchanged from PR7",
+  "complete_translation_and_windows11_acceptance": "pending OWNER diagnostic/acceptance; no genuine translation models in Cloud"
 }
