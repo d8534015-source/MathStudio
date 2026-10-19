@@ -11,11 +11,11 @@
     "Frozen GUI/native import self-test without Python on PATH",
     "Bundled self-test evidence written",
     "Frozen Website Management module and client-only role",
+    "Frozen Windows DPAPI encrypt/decrypt and desktop auth protocol",
     "Bundled runtime and no console window",
     "Current-user uninstall registration",
     "Uninstall removes installed executable",
     "Uninstall removes Start menu shortcut",
     "Reinstall"
-  ],
-  "install_path_description": "Disposable Windows CI directory with Unicode, spaces and a long path"
+  ]
 }
