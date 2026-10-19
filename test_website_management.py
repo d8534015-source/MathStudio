@@ -210,8 +210,25 @@ class NativeWebsiteUI(BackendCase):
         self.fail('Background desktop request did not finish')
 
     def tearDown(self):
+        import gc
         for job in self.root.tk.call('after','info'):self.root.after_cancel(job)
-        self.root.destroy();super().tearDown()
+        self.root.destroy()
+        # Tk interpreters must be collected on the thread which created them,
+        # before later HTTP concurrency tests can trigger cyclic collection.
+        self.editor=None;self.uiapp=None;self.root=None;gc.collect()
+        super().tearDown()
+
+    def test_destroyed_editor_releases_tk_references_during_background_request(self):
+        import threading
+        from functools import partial
+        release=threading.Event();started=threading.Event()
+        def waiting():started.set();release.wait(3)
+        self.editor.request(partial(waiting));self.assertTrue(started.wait(1))
+        future=self.editor.pending;editor=self.editor
+        self.uiapp.show_page('dashboard');self.root.update()
+        self.assertFalse(editor.alive);self.assertIsNone(editor.poll_job)
+        self.assertIsNone(editor.title);self.assertIsNone(editor.enabled);self.assertIsNone(editor.tr)
+        release.set();future.result(timeout=2)
 
     def select_intro(self):
         self.editor.content_choice.current(next(i for i,e in enumerate(self.editor.entries) if e['key']=='settings:0:intro'))
@@ -240,8 +257,10 @@ class NativeWebsiteUI(BackendCase):
     def test_failure_keeps_editor_text_and_background_generation_keeps_tk_responsive(self):
         import threading
         self.select_intro();self.editor.put(self.editor.content_text,'Unsaved original $x^2$.');self.editor.dirty=True
-        with mock.patch.object(self.editor.service,'content',side_effect=APIError('OWNER offline')),mock.patch('teacher_website.messagebox.showerror') as error:
+        failure=APIError('OWNER offline')
+        with mock.patch.object(self.editor.service,'content',side_effect=failure),mock.patch('teacher_website.messagebox.showerror') as error:
             self.editor.content_action('save');self.drain();error.assert_called_once()
+        self.assertIsNone(failure.__traceback__)
         self.assertEqual(self.editor.content_text.get('1.0','end-1c'),'Unsaved original $x^2$.')
         self.assertTrue(self.editor.dirty)
         self.editor.dirty=False
@@ -262,7 +281,8 @@ class NativeWebsiteUI(BackendCase):
         self.assertEqual(self.request('/api/content-translations?lang=zh')[1]['translations'],{})
         if os.environ.get('MATH_WEBSITE_SCREENSHOTS'):
             from PIL import ImageGrab
+            destination=Path(os.environ['MATH_WEBSITE_SCREENSHOTS']);destination.mkdir(parents=True,exist_ok=True)
             with mock.patch('teacher_desktop_app.save_language'):
                 for lang in ('zh','en'):
                     self.uiapp.toggle_language();self.root.update()
-                    ImageGrab.grab(xdisplay=os.environ.get('DISPLAY')).save(Path(os.environ['MATH_WEBSITE_SCREENSHOTS'])/('desktop-translations-'+lang+'.png'))
+                    ImageGrab.grab(xdisplay=os.environ.get('DISPLAY')).save(destination/('desktop-translations-'+lang+'.png'))

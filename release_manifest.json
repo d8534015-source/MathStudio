@@ -684,7 +684,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "40b6af2c3d4f28cd4bab9464a3cdc6986fc6bb4ee7bb1f53a5145aa06ab4a823"
+      "sha256": "4f49d18969269fddfde0f9f965ee5c1677cfeec9974dd02fea3d16fdc61ae825"
     },
     "website_content.py": {
       "packages": [
@@ -696,7 +696,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "7ceca2de189d50253e1144011ef2aa0bd2176b048bd6a8c3bed707e09c4ac6cc"
+      "sha256": "e5783c340cc2090a012080907b6d001528aa2cbb79593286e9ffcc711786c482"
     },
     "WEBSITE_MANAGEMENT.md": {
       "packages": [
@@ -715,7 +715,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "0a16728ee17604553d1abf5ee9bfbfe39af6bca754f1df07cf712382b49dfbaa"
+      "sha256": "f81bb5ac710b189fd4a3504a530ed58eb657657efb712be3b8ff5591252896c1"
     }
   }
 }

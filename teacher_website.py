@@ -1,5 +1,6 @@
 """Teacher-only HTTPS content client and Tk editor. No server/inference imports."""
 import copy
+from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 import tkinter as tk
 from tkinter import ttk,messagebox,simpledialog
@@ -158,6 +159,11 @@ class WebsiteManagement(ttk.Frame):
             self.alive=False
             if self.poll_job:self.after_cancel(self.poll_job);self.poll_job=None
             self.pool.shutdown(wait=False,cancel_futures=True)
+            # Release Tk-owned values/cycles on their creating thread. In
+            # particular, no pending HTTP callable may keep this widget alive.
+            self.tr=None;self.navigate=None;self.labels.clear();self.controls.clear()
+            for name,value in list(vars(self).items()):
+                if name!='master' and isinstance(value,(tk.Widget,tk.Variable)):setattr(self,name,None)
 
     def request(self,fn,success=None):
         if self.pending:return
@@ -180,6 +186,10 @@ class WebsiteManagement(ttk.Frame):
                 self.status_key='Saved / loaded successfully';self.status.configure(text=self.tr(self.status_key))
                 if success:success(result)
             except Exception as error:
+                # Future.result() attaches this GUI frame to the exception.
+                # Retaining it in the Future would keep a destroyed Tk tree in
+                # a cycle which another thread could later garbage-collect.
+                error.__traceback__=None
                 self.status_key='Request failed. Your editor text is unchanged.';self.status.configure(text=self.tr(self.status_key))
                 messagebox.showerror(self.tr('Website Management'),self.tr(str(error)),parent=self)
         self.poll_job=self.after(80,check)
@@ -261,7 +271,7 @@ class WebsiteManagement(ttk.Frame):
                 messagebox.showinfo(self.tr('Website Management'),self.tr('Save the source draft before publishing or previewing.'),parent=self);return
             if not messagebox.askyesno(self.tr('Website Management'),self.tr('Publish content?' if action=='publish' else 'Unpublish content?'),parent=self):return
         text=self.content_text.get('1.0','end-1c');title=self.title.get()
-        self.request(lambda:self.service.content(entry,action,text if action=='save' else None,title),self.saved)
+        self.request(partial(self.service.content,entry,action,text if action=='save' else None,title),self.saved)
 
     def new_post(self):
         if self.dirty:
@@ -269,7 +279,7 @@ class WebsiteManagement(ttk.Frame):
         title=simpledialog.askstring(self.tr('New announcement'),self.tr('Announcement title'),parent=self)
         if not title:return
         text=simpledialog.askstring(self.tr('New announcement'),self.tr('Announcement message'),parent=self)
-        if text:self.request(lambda:self.service.create_post(title,text),self.saved)
+        if text:self.request(partial(self.service.create_post,title,text),self.saved)
 
     def translation_action(self,action,regenerate=False):
         source=self.source();target=self.target.get()
@@ -280,11 +290,11 @@ class WebsiteManagement(ttk.Frame):
         if action=='generate' and self.dirty and not messagebox.askyesno(self.tr('Website Management'),self.tr('Replace the unsaved translation draft? Approved text stays unchanged.'),parent=self):return
         if action=='approve' and not messagebox.askyesno(self.tr('Website Management'),self.tr('Approve and publish this reviewed translation?'),parent=self):return
         row=translation_row(self.translations,source['key'],target);text=self.trans_text.get('1.0','end-1c')
-        self.request(lambda:self.service.translation(source,row,target,action,text,regenerate),self.saved)
+        self.request(partial(self.service.translation,source,row,target,action,text,regenerate),self.saved)
 
     def config_action(self):
         enabled=self.enabled.get();terms=[x.strip() for x in self.terms.get('1.0','end-1c').splitlines() if x.strip()]
-        self.request(lambda:self.service.configure(enabled,terms),self.saved)
+        self.request(partial(self.service.configure,enabled,terms),self.saved)
 
     def preview(self,target):
         entry=self.entry()
