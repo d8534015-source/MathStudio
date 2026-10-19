@@ -6,7 +6,7 @@
     "asset_version": "41_6_6_delivery1"
   },
   "parent_commit": "cd09b99483abf1c2260bcf9c91183280df1b4f4b",
-  "status": "Teacher Website Management review candidate stacked on PR #8; no production deployment.",
+  "status": "Teacher Website Management review candidate: automated Linux/Windows CI passed; unsigned; Windows11/mobile acceptance pending.",
   "folders": {
     "owner": "MathStudio_v41_6_6_OWNER_Website_Management_Review",
     "teacher": "MathStudio_v41_6_6_TEACHER_Website_Management_Review"
@@ -25,7 +25,7 @@
         "packaging/argos/requirements-windows-py313.txt",
         "packaging/argos/requirements-linux-py313.txt"
       ],
-      "verified": "Full suite 130/130 on Python 3.13.5 Linux; 27 focused tests with genuine sentence models on Linux and Windows Server/Python 3.13.16; full translation/Windows 11 acceptance pending",
+      "verified": "User-confirmed official bidirectional Win11/Python3.13.7 acceptance on PR8; local full155/155 and Windows client151 passed/4 optional skips; new real-model desktop acceptance remains manual",
       "models": "Original official Argos 1.9 archives plus hash-pinned upstream MiniSBD sentence models; only real bidirectional checks activate",
       "storage": "External MathStudio per-user translation directory; never packaged",
       "profile": "packaging/argos/profile.json"
@@ -485,7 +485,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "a9378cf92faf27864a712c1cf8a5cb5094f736088ee83698d1a63bceb94baba5"
+      "sha256": "6a042ec580a2e77cd8b2cfbdd33ddb600e10614f9a6132bb7db99b506fb2026c"
     },
     ".github/workflows/windows-installer.yml": {
       "packages": [
@@ -703,7 +703,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "5c30342055cf968d062cda7d531ff35c0f14e8d3fd9a1c6bc533f652c3425bd1"
+      "sha256": "1d59dcf27de76a38bdfe4a8f7a121e117b1b75416b50ccaaeda39e4156e93317"
     },
     "packaging/windows/check_client_payload.py": {
       "packages": [
@@ -715,7 +715,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "f81bb5ac710b189fd4a3504a530ed58eb657657efb712be3b8ff5591252896c1"
+      "sha256": "d4422898a49b8585ff922bbdeb00e62469128763d1bf3a7038d576c42d958e4d"
     }
   }
 }

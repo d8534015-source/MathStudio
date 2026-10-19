@@ -1,5 +1,7 @@
 # Website Management review candidate — v41.6.6
 
+Download the **unsigned, isolated review installer** from [MathStudio-Website-Management-Review.exe](website-management-review/MathStudio-Website-Management-Review.exe?raw=true). See [verified results and checksums](website-management-review/TEST_RESULTS.md). Windows Server CI has passed; Windows 11/mobile acceptance remains manual.
+
 Stacked on Draft PR #8, commit `cd09b99483abf1c2260bcf9c91183280df1b4f4b`. No deployment, DNS changes, production records, installed EXE or paid infrastructure is changed by this PR.
 
 ## Teacher workflow
