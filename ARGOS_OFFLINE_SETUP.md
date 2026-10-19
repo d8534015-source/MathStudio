@@ -45,6 +45,19 @@ py -3.13 verify_argos_models.py --output D:\MathStudioChecks\argos-model-results
 
 The command requires the existing application test dependencies plus access to the installed external Argos runtime; it never downloads models itself. If models are missing, it exits with a blocked result and no examples. Simple real setup examples are also recorded under `offline_examples` in `installation.json` only after actual success. Inspect both model quality and math/name preservation before approving public content. Do not substitute mocked unit outputs for real examples.
 
+## Retry a failed self-test without reinstalling dependencies
+
+Use the updated `argos_setup.py` and `argos_worker.py` together. Stop OWNER and open PowerShell in the OWNER application folder. With the two original official model archives already available, run:
+
+```powershell
+$env:PYTHONUTF8 = '1'
+$models = Read-Host 'Folder containing both official .argosmodel files'
+py -3.13 argos_setup.py install --skip-dependencies --model-files "$models"
+py -3.13 argos_setup.py status
+```
+
+This reuses the existing external runtime; it does not run pip or download models. Both actual offline direction checks still must pass before models or a verified receipt are activated. On failure the diagnostic names the direction, worker exit status, exception class, code locations and available OS error numbers. It omits exception messages, paths, input text and local variables. Timeouts, malformed responses and empty/unchanged translations are reported separately. An old worker with no diagnostic record is identified explicitly. `ready: false` after failed verification is intentional; do not edit the receipt to bypass it. The earlier generic failure alone cannot identify the underlying Windows exception; retain the new sanitized diagnostic for diagnosis. This repair is not proof that real-model acceptance passed.
+
 ## Isolation, cache and protection
 
 One low-priority CPU worker runs at a time with one inference thread. Concurrent generation gets a retry message. Each child is terminated/reaped on its 30-second deadline; only the translation editor has a 45-second HTTP deadline. Classroom polling and native/browser media requests use independent server threads and retain their existing timeouts. Argos is never imported into the HTTP or teacher process. The website shows progress while awaiting the asynchronous request.

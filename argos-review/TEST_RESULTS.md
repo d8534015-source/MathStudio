@@ -45,3 +45,13 @@ The new OWNER archive excludes model files, wheels, environments, private config
 - [ ] Human review of actual bilingual mathematical output, Protected terms and approval before publishing descriptions.
 
 The archive is delivered for review via draft PR #8, not a GitHub release. Stop OWNER, extract the new OWNER folder, retain the existing external data/configuration paths, use the existing OWNER setup/start instructions, and run **SETUP OFFLINE TRANSLATION.bat** for optional models. Teacher Ready connects to OWNER and does not install or host Argos. Do not replace or reset the account database. Run `Get-FileHash .\MathStudio_v41_6_6_OWNER_Argos_Review_Candidate.zip -Algorithm SHA256` and compare against the accompanying `SHA256SUMS.txt` before use.
+
+## Windows self-test diagnostic repair — 2026-10-19
+
+The worker's blanket exception handler previously exited with code 2 and empty stderr. This was reproduced with the existing Python 3.13 dependency runtime and missing models. It now emits sanitized exception type/code locations/OS error numbers, without exception messages, paths, input or local variables. Setup names the language direction and separates worker errors, startup errors, timeouts and response-validation failures. No actual Windows model exception was supplied, so its underlying cause remains unconfirmed; model loading and verification requirements are unchanged.
+
+Added `--skip-dependencies` for retry with an existing runtime and the original official archives: no pip invocation or model download is needed. Both staged offline direction checks must still pass. Three new regressions cover safe diagnostics, invalid/unchanged outputs, timeouts/startup failures, no activation after second-direction failure, and activation only after both checks pass.
+
+Targeted tests after this repair: **22 passed** on Python 3.12 (2.220 seconds) and **22 passed** on the existing Linux Python 3.13 runtime (4.401 seconds). The actual missing-model worker now returns a safe `ValueError` location rather than empty stderr. No dependency installation, pip upgrade, full audit, full-suite rerun, model download, Windows execution or media change was performed for this repair. Earlier full-suite/Windows CI evidence above applies to the earlier code commit, not this follow-up.
+
+This follow-up is a source repair: update `argos_setup.py` and `argos_worker.py` together using the current PR #8 source, then follow the retry section in `ARGOS_OFFLINE_SETUP.md`. The earlier immutable OWNER ZIP and its checksum are retained unchanged and **do not include this follow-up repair**.

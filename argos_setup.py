@@ -6,6 +6,7 @@ import json
 import os
 import platform
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import socket
 import struct
@@ -101,18 +102,55 @@ def unpack_model(archive,destination,pair):
     return folder
 
 
-def install(model_files=None,wheelhouse=None):
+def self_test(base,packages):
+    # Test staged models before any active model or installation receipt changes.
+    env=argos_runtime.environment(base);env['ARGOS_PACKAGES_DIR']=str(packages)
+    examples=[]
+    for target,text in [('zh','We learn mathematics together.'),('en','我们一起学习数学。')]:
+        pair='en_zh' if target=='zh' else 'zh_en'
+        prefix='Offline model self-test failed ('+pair+'). No new models were activated. '
+        try:
+            result=subprocess.run([str(argos_runtime.python_path()),'-I','-u',str(ROOT/'argos_worker.py')],
+                input=json.dumps({'target':target,'pieces':[text]}),encoding='utf-8',stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,timeout=argos_runtime.TIMEOUT,cwd=base,env=env)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(prefix+'Worker exceeded the '+str(argos_runtime.TIMEOUT)+'-second deadline.') from None
+        except OSError as error:
+            codes=''.join(' '+key+'='+str(getattr(error,key)) for key in ('errno','winerror') if type(getattr(error,key,None)) is int)
+            raise RuntimeError(prefix+'Worker could not start: '+type(error).__name__+codes) from None
+        if result.returncode:
+            # Libraries can log paths or input text. Only our sanitized record is printable.
+            notes=[line.removeprefix('ARGOS_DIAGNOSTIC ') for line in result.stderr.splitlines() if line.startswith('ARGOS_DIAGNOSTIC ')]
+            detail=notes[-1] if notes and re.fullmatch(r'[A-Za-z0-9_.:=; -]{1,1500}',notes[-1]) else 'No safe exception record; confirm argos_worker.py is updated.'
+            raise RuntimeError(prefix+'Worker exit='+str(result.returncode)+'. '+detail)
+        try:
+            values=json.loads(result.stdout)['pieces']
+            if not isinstance(values,list) or len(values)!=1 or not isinstance(values[0],str) or len(values[0])>20000:
+                raise ValueError()
+            translated=values[0]
+        except (ValueError,KeyError,TypeError):
+            raise RuntimeError(prefix+'Invalid worker response; expected one translated string.') from None
+        if not translated.strip() or translated.strip()==text:
+            raise RuntimeError(prefix+'Validation rejected empty or unchanged translation.')
+        examples.append({'target':target,'source':text,'translation':translated})
+        print(text,'->',translated,flush=True)
+    return examples
+
+
+def install(model_files=None,wheelhouse=None,skip_dependencies=False):
     check_host()
     with maintenance() as base:
         runtime=base/'runtime'
         if not argos_runtime.python_path().exists():
+            if skip_dependencies:raise RuntimeError('Existing Argos runtime not found. Cannot skip dependency installation.')
             venv.EnvBuilder(with_pip=True).create(runtime)
         lock=ROOT/'packaging'/'argos'/('requirements-windows-py313.txt' if os.name=='nt' else 'requirements-linux-py313.txt')
-        command=[str(argos_runtime.python_path()),'-m','pip','install','--require-hashes','--only-binary=:all:','-r',str(lock)]
-        if wheelhouse:command+=['--no-index','--find-links',str(Path(wheelhouse).resolve())]
-        else:command+=['--index-url','https://pypi.org/simple','--extra-index-url','https://download.pytorch.org/whl/cpu']
-        subprocess.run(command,check=True)
-        subprocess.run([str(argos_runtime.python_path()),'-m','pip','check'],check=True)
+        if not skip_dependencies:
+            command=[str(argos_runtime.python_path()),'-m','pip','install','--require-hashes','--only-binary=:all:','-r',str(lock)]
+            if wheelhouse:command+=['--no-index','--find-links',str(Path(wheelhouse).resolve())]
+            else:command+=['--index-url','https://pypi.org/simple','--extra-index-url','https://download.pytorch.org/whl/cpu']
+            subprocess.run(command,check=True)
+            subprocess.run([str(argos_runtime.python_path()),'-m','pip','check'],check=True)
         (base/'packages').mkdir(exist_ok=True)
         installed={}
         with tempfile.TemporaryDirectory(prefix='setup-',dir=base) as scratch:
@@ -126,17 +164,7 @@ def install(model_files=None,wheelhouse=None):
                 installed[pair]={'folder':folder,'version':spec['version'],'url':spec['url'],'sha256':sha}
                 print(pair,'SHA-256:',sha,flush=True)
             # Validate actual models with all network operations disabled before publication.
-            env=argos_runtime.environment(base);env['ARGOS_PACKAGES_DIR']=str(packages)
-            examples=[]
-            for target,text in [('zh','We learn mathematics together.'),('en','我们一起学习数学。')]:
-                result=subprocess.run([str(argos_runtime.python_path()),'-I','-u',str(ROOT/'argos_worker.py')],
-                    input=json.dumps({'target':target,'pieces':[text]}),encoding='utf-8',stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,timeout=argos_runtime.TIMEOUT,cwd=base,env=env)
-                if result.returncode:raise RuntimeError('Offline model self-test failed. No new models were activated. '+result.stderr[-2000:])
-                translated=json.loads(result.stdout)['pieces'][0]
-                if not translated.strip() or translated.strip()==text:raise RuntimeError('Offline model self-test produced no translation.')
-                examples.append({'target':target,'source':text,'translation':translated})
-                print(text,'->',translated,flush=True)
+            examples=self_test(base,packages)
             replaced=[]
             try:
                 for item in installed.values():
@@ -168,10 +196,11 @@ def main():
     parser.add_argument('action',choices=('install','status'))
     parser.add_argument('--model-files',type=Path,help='Directory containing the two official .argosmodel files for disconnected setup.')
     parser.add_argument('--wheelhouse',type=Path,help='Pre-downloaded hash-locked wheels for disconnected setup.')
+    parser.add_argument('--skip-dependencies',action='store_true',help='Reuse an existing Argos runtime without running pip; model verification is still required.')
     args=parser.parse_args()
     if args.action=='status':
         print(json.dumps({'home':str(argos_runtime.home()),'ready':argos_runtime.ready()},indent=2));return
-    try:install(args.model_files,args.wheelhouse)
+    try:install(args.model_files,args.wheelhouse,args.skip_dependencies)
     except (OSError,RuntimeError,ValueError,KeyError,argos_runtime.ArgosError,subprocess.SubprocessError,zipfile.BadZipFile) as ex:
         print('Offline translation setup failed:',str(ex),file=sys.stderr);sys.exit(1)
 

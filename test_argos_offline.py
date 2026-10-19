@@ -1,5 +1,6 @@
 """OWNER offline regressions: synthetic data only; model downloads are never used here."""
 import concurrent.futures
+import contextlib
 import io
 import json
 import os
@@ -110,6 +111,64 @@ class RuntimeTests(unittest.TestCase):
             self.assertNotIn(value,protected)
         restored=pt.restore('翻译：'+protected,spans)
         self.assertEqual(restored,'翻译：'+original)
+
+    def test_worker_failure_reports_type_and_location_without_private_details(self):
+        script="""import json,runpy,sys
+def synthetic_failure(*args):
+    raise FileNotFoundError(2,'synthetic-secret student text',r'C:\\Users\\Private Name\\private-model')
+json.loads=synthetic_failure
+runpy.run_path(sys.argv[1],run_name='__main__')
+"""
+        result=subprocess.run([__import__('sys').executable,'-c',script,str(Path(__file__).with_name('argos_worker.py'))],capture_output=True,text=True,timeout=10)
+        self.assertEqual(result.returncode,2);self.assertEqual(result.stdout,'')
+        self.assertIn('ARGOS_DIAGNOSTIC exception=FileNotFoundError',result.stderr)
+        self.assertIn('errno=2',result.stderr);self.assertIn('synthetic_failure:',result.stderr)
+        for private in ['synthetic-secret','student text','Private Name','private-model','Traceback']:
+            self.assertNotIn(private,result.stderr)
+
+    def test_self_test_diagnostics_and_response_validation_fail_closed(self):
+        good=subprocess.CompletedProcess([],0,json.dumps({'pieces':['翻译']}),'')
+        failure=subprocess.CompletedProcess([],2,'','private path and synthetic-secret\nARGOS_DIAGNOSTIC exception=RuntimeError; at=stanza.example.load:42\n')
+        cases=[(failure,'exception=RuntimeError'),
+               (subprocess.CompletedProcess([],2,'','private path and synthetic-secret'),'No safe exception record'),
+               (subprocess.CompletedProcess([],0,'not JSON',''),'Invalid worker response'),
+               (subprocess.CompletedProcess([],0,json.dumps({'pieces':[]}),''),'Invalid worker response'),
+               (subprocess.CompletedProcess([],0,json.dumps({'pieces':['我们一起学习数学。']}),''),'unchanged translation'),
+               (subprocess.TimeoutExpired('private path and synthetic-secret',30),'deadline'),
+               (FileNotFoundError(2,'synthetic-secret','private path'),'errno=2')]
+        for failed,expected in cases:
+            with self.subTest(expected=expected):
+                with mock.patch.object(setup.subprocess,'run',side_effect=[good,failed]),contextlib.redirect_stdout(io.StringIO()):
+                    with self.assertRaises(RuntimeError) as caught:setup.self_test(Path(self.temp.name),Path(self.temp.name)/'staged')
+                message=str(caught.exception)
+                self.assertIn('zh_en',message);self.assertIn(expected,message)
+                self.assertIn('No new models were activated',message)
+                self.assertNotIn('private path',message);self.assertNotIn('synthetic-secret',message)
+
+    def test_retry_skips_pip_and_never_activates_models_on_second_direction_failure(self):
+        base=Path(self.temp.name);python=ar.python_path();python.parent.mkdir(parents=True);python.touch()
+        original=b'{"verified":false}'
+        (base/'installation.json').write_bytes(original)
+        archives=base/'official-files';archives.mkdir()
+        for pair in ('en_zh','zh_en'):
+            source,target=pair.split('_');folder='translate-'+pair+'-1_9'
+            data={folder+'/metadata.json':json.dumps({'from_code':source,'to_code':target,'package_version':'1.9'}),folder+'/model/model.bin':'synthetic'}
+            (archives/(folder+'.argosmodel')).write_bytes(self.archive(data).getvalue())
+        results=[subprocess.CompletedProcess([],0,json.dumps({'pieces':['学习数学']}),''),subprocess.CompletedProcess([],2,'','ARGOS_DIAGNOSTIC exception=ValueError; at=argos_worker.run:65\n')]
+        with mock.patch.object(setup,'check_host'),mock.patch.object(setup.subprocess,'run',side_effect=results) as child,contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError,'zh_en'):setup.install(model_files=archives,skip_dependencies=True)
+        self.assertEqual(child.call_count,2)
+        for call in child.call_args_list:
+            self.assertIn('argos_worker.py',call.args[0][-1]);self.assertNotIn('pip',call.args[0])
+        self.assertEqual((base/'installation.json').read_bytes(),original)
+        self.assertEqual(list((base/'packages').iterdir()),[])
+        self.assertFalse((base/'.setup.lock').exists());self.assertFalse(ar.ready())
+        results[1]=subprocess.CompletedProcess([],0,json.dumps({'pieces':['We learn mathematics together.']}),'')
+        with mock.patch.object(setup,'check_host'),mock.patch.object(setup.subprocess,'run',side_effect=results) as child,contextlib.redirect_stdout(io.StringIO()):
+            setup.install(model_files=archives,skip_dependencies=True)
+        self.assertEqual(child.call_count,2);self.assertTrue(ar.ready())
+        receipt=json.loads((base/'installation.json').read_text(encoding='utf-8'))
+        self.assertTrue(receipt['verified']);self.assertEqual(len(receipt['offline_examples']),2)
 
     def test_worker_guard_denies_network_before_optional_imports(self):
         # A separate process prevents the guard from modifying this test runner's sockets.

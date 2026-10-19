@@ -586,13 +586,13 @@
       "packages": [
         "owner"
       ],
-      "sha256": "e2d4979442413af058f1867a1edf816b2bf591022c29bf69628d61da2cff3825"
+      "sha256": "de9e6760de59006a7befc31720938788eb73a9e7c9e589f494aa1f83c9645d35"
     },
     "argos_setup.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "37e0e03046e940caf32e5b88ca87f5a849120a211c06fad571b9529ee3d8dab9"
+      "sha256": "9386c209e8cc7b1ef7517a9404b1762dfc0e85072d5412d83d5f006ad225a3f7"
     },
     "SETUP OFFLINE TRANSLATION.bat": {
       "packages": [
@@ -604,13 +604,13 @@
       "packages": [
         "owner"
       ],
-      "sha256": "e74be31fa30551d1b13643b846442e1be7160ef71f6bf1767a144d5602e85600"
+      "sha256": "8752de2dfbfc65b2e7ecc620366456815a8b826bfe6c4468c4d8f03ac585ebd3"
     },
     "test_argos_offline.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "2883ea584e17f47132d654f3e89aacc6681aee3edf17eded4bfa02d07b684d99"
+      "sha256": "ebd4a8f4585f8eff8d406bdac7cbb5bd0463f9dd849227332d8914f27c885fa0"
     },
     "verify_argos_models.py": {
       "packages": [
@@ -646,7 +646,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "f438551d9609a25e82d34106ed6a282f740a0b739edcf10051d65c5e86f0170e"
+      "sha256": "ed64a9e86e08afd00a8b9622ee3bd801a07545c2c992b46ea3a85d122c304605"
     },
     "argos-review/dependency-results.json": {
       "packages": [

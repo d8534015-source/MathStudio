@@ -11,6 +11,28 @@ def deny_network(*args, **kwargs):
     raise OSError('Network is disabled during offline translation.')
 
 
+def safe_diagnostic(error):
+    """Code locations and error types only: never exception text, paths or locals."""
+    details=[];seen=set()
+    while error is not None and id(error) not in seen and len(seen)<3:
+        seen.add(id(error))
+        name=type(error).__name__
+        details.append('exception='+name if re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]{0,79}',name) else 'exception=Unknown')
+        for key in ('errno','winerror'):
+            value=getattr(error,key,None)
+            if type(value) is int:details.append(key+'='+str(value))
+        frames=[];tb=error.__traceback__
+        while tb is not None:
+            module=tb.tb_frame.f_globals.get('__name__','')
+            function=tb.tb_frame.f_code.co_name
+            if re.fullmatch(r'[A-Za-z_][A-Za-z_0-9.]{0,119}',module) and re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]{0,79}',function):
+                frames.append(module+'.'+function+':'+str(tb.tb_lineno))
+            tb=tb.tb_next
+        details.extend('at='+frame for frame in frames[-4:])
+        error=error.__cause__ if error.__cause__ is not None else (None if error.__suppress_context__ else error.__context__)
+    return '; '.join(details)[:1500]
+
+
 def run(payload):
     # Set before optional imports. Missing resources must fail, never fetch anything.
     socket.socket.connect = deny_network
@@ -64,6 +86,7 @@ if __name__=='__main__':
         payload=json.loads(sys.stdin.read(100001))
         with contextlib.redirect_stdout(sys.stderr):result=run(payload)
         print(json.dumps(result,ensure_ascii=False))
-    except Exception:
-        # Package errors may include filesystem paths; do not expose them to browsers.
+    except Exception as error:
+        # Setup reads only this safe record. Browser inference discards all stderr.
+        print('ARGOS_DIAGNOSTIC '+safe_diagnostic(error),file=sys.stderr,flush=True)
         sys.exit(2)
