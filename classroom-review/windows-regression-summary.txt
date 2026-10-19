@@ -1,0 +1,11 @@
+
+----------------------------------------------------------------------
+Ran 204 tests in 172.229s
+
+OK (skipped=5)
+
+test_legacy_all_caps_is_unsupported_by_stanza110_data_api (test_argos_offline.RuntimeTests.test_legacy_all_caps_is_unsupported_by_stanza110_data_api) ... skipped 'Optional installed dependency runtime required'
+test_real_minisbd_models_use_argos_supported_api_offline_repeatedly (test_argos_offline.RuntimeTests.test_real_minisbd_models_use_argos_supported_api_offline_repeatedly) ... skipped 'Official local MiniSBD models required'
+test_real_sentencepiece_unicode_probes_and_native_error_are_safe (test_argos_offline.RuntimeTests.test_real_sentencepiece_unicode_probes_and_native_error_are_safe) ... skipped 'Optional installed SentencePiece runtime required'
+test_tokenizer_probe_failure_does_not_expose_details_or_repair_tokenizer (test_argos_offline.RuntimeTests.test_tokenizer_probe_failure_does_not_expose_details_or_repair_tokenizer) ... skipped 'Optional installed SentencePiece runtime required'
+test_actual_mux_tracks_pause_stop_annotations_and_original_tracks_survive (test_recording_browser.BrowserRecording.test_actual_mux_tracks_pause_stop_annotations_and_original_tracks_survive) ... skipped 'Optional Chromium/Playwright/ffprobe harness unavailable'

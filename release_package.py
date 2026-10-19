@@ -14,10 +14,10 @@ def candidate_files(root,manifest,kind):
     for name,item in manifest['files'].items():
         if kind not in item['packages']:continue
         relative=PurePosixPath(name)
-        blocked={'.git','.venv','bulletin_data','file_store','private_config.json','media_config.bat','cloud_storage.bat','.env'}
+        blocked={'.git','.venv','bulletin_data','file_store','private_config.json','media_config.bat','cloud_storage.bat','.env','recordings','recording-policy.json'}
         if relative.is_absolute() or '..' in relative.parts or '\\' in name or any(part.lower() in blocked for part in relative.parts):
             raise ValueError('Private or unsafe package path: '+name)
-        if relative.suffix.lower() in ('.db','.sqlite','.sqlite3','.log','.exe','.dll','.pfx','.p12','.pem','.key'):
+        if relative.suffix.lower() in ('.db','.sqlite','.sqlite3','.log','.exe','.dll','.pfx','.p12','.pem','.key','.webm','.mp4','.part','.argosmodel','.onnx','.pt','.model'):
             raise ValueError('Runtime data, secrets and unverified binaries are excluded: '+name)
         path=root/name
         if path.resolve()!=path or not path.is_file():raise ValueError('Missing or linked release file: '+name)

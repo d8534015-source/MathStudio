@@ -14,7 +14,7 @@ class NativeAnnotationTests(unittest.TestCase):
             if len(calls)<=conflicts: raise RuntimeError("Board changed; retry")
             return {"version":3}
         ns=extracted_functions('teacher_meeting_app.py',{'save_board','undo','clear_all','erase_at'},
-            {'http_json':http,'threading':SimpleNamespace(Thread=lambda target,**kw:SimpleNamespace(start=target)),
+            {'BoardQueue':__import__('annotation_pipeline').BoardQueue,'http_json':http,'threading':SimpleNamespace(Thread=lambda target,**kw:SimpleNamespace(start=target)),
              'messagebox':SimpleNamespace(askyesno=lambda *a,**kw:True),'APP_NAME':'Test'})
         obj=SimpleNamespace(board={"background":"blank","shapes":[{"id":"own"},{"id":"other"}]},
             version=1,my_shapes=['own'],saving=False,connected=True,closed=False,token='synthetic',server='local',
@@ -22,6 +22,16 @@ class NativeAnnotationTests(unittest.TestCase):
             redraw=lambda:None,state_url=lambda:'state',toolbar=None,tr=lambda x:x,
             shape_distance=lambda shape,x,y:0 if shape['id']=='own' else 1)
         for name in ('save_board','undo','clear_all','erase_at'): setattr(obj,name,MethodType(ns[name],obj))
+        raw=obj.save_board
+        def save(*args,**kwargs):
+            from unittest import mock
+            with mock.patch('annotation_pipeline.threading.Thread',lambda target,**kw:SimpleNamespace(start=target)):
+                accepted=raw(*args,**kwargs)
+            sync=obj.board_sync;sync.drain();obj.board=sync.projected();obj.version=sync.version;obj.saving=sync.busy
+            present={x['id'] for x in sync.board['shapes']}|{x['id'] for op in sync.pending for x in op['add']}
+            obj.my_shapes=[sid for sid in obj.my_shapes if sid in present]
+            return accepted
+        obj.save_board=save
         return obj,calls
 
     def test_rel03_undo_and_erase_retry_remove_only_target(self):
@@ -44,7 +54,8 @@ class NativeAnnotationTests(unittest.TestCase):
         for operation in ('undo','clear_all'):
             obj,calls=self.controller(operation,fail=True); getattr(obj,operation)()
             self.assertEqual(obj.my_shapes,['own'])
-            self.assertEqual([s['id'] for s in obj.board['shapes']],['own','other'])
+            self.assertEqual([s['id'] for s in obj.board_sync.board['shapes']],['own','other'])
+            self.assertTrue(obj.board_sync.pending)
             self.assertFalse(obj.saving)
 
     def test_rel03_repeated_conflicts_keep_intent_and_exhaustion_keeps_history(self):
@@ -53,7 +64,8 @@ class NativeAnnotationTests(unittest.TestCase):
         self.assertEqual(len(calls),3)
         obj,calls=self.controller('clear_all',conflicts=3);obj.clear_all()
         self.assertEqual(obj.my_shapes,['own'])
-        self.assertEqual([s['id'] for s in obj.board['shapes']],['own','other'])
+        self.assertEqual([s['id'] for s in obj.board_sync.board['shapes']],['own','other'])
+        self.assertTrue(obj.board_sync.pending)
         self.assertFalse(obj.saving)
 
     def test_rel03_add_retry_keeps_remote_shapes(self):

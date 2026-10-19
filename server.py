@@ -229,7 +229,11 @@ def db():
     finally:
         c.close()
 
+RECORDING_HANDOFFS={}
+RECORDING_STORE=None
+
 def init():
+    global RECORDING_STORE
     DATA.mkdir(parents=True,exist_ok=True)
     with db() as c:
         c.executescript('''
@@ -313,6 +317,10 @@ def init():
         ]
         for name,minutes in lesson_names:
             c.execute("INSERT OR IGNORE INTO lesson_types(name,minutes,price_label,active) VALUES (?,?,?,1)",(name,minutes,'Price TBD'))
+
+    from classroom_recording import Store
+    from recording_cloud import R2
+    RECORDING_STORE=Store(DATA,db,APIError,R2(storage_config))
 
 def hash_password(password):
     salt=secrets.token_hex(16)
@@ -1005,6 +1013,14 @@ class Handler(BaseHTTPRequestHandler):
                     self.end_headers()
                     return
             self.prepare()
+            if not post and self.path_only=='/teacher-recordings-login':
+                with LOCK:
+                    token=self.query.get('token',[''])[0]
+                    item=RECORDING_HANDOFFS.pop(token,None)
+                    need(item and item['expires']>time.time(),'Recording link expired. Open Recordings from the teacher app again.',403)
+                    with db() as c:user=validate_token_user(item,c,{},admin=True)
+                    if not self.user or self.user['id']!=user['id']:self.rotate(user['id'])
+                self.send_redirect('/recordings?selected='+item['record_id']+'&download='+('1' if item['download'] else '0'));return
             if not post and self.path_only=='/teacher-media-login':
                 token=self.query.get('token',[''])[0]
                 with LOCK:
@@ -1020,6 +1036,16 @@ class Handler(BaseHTTPRequestHandler):
                 media_token,cl=make_teacher_media_token(app_data.get('token',''))
                 self.send({'ok':True,'media_token':media_token,'class_id':cl['id'],'expires_in':90})
                 return
+            if post and self.path_only=='/api/admin/recordings/chunk':
+                self.require_user(True)
+                need(hmac.compare_digest(self.headers.get('X-CSRF-Token','').encode(),self.session['csrf'].encode()),'Form expired. Refresh and try again.',403)
+                need(not self.headers.get('Transfer-Encoding'),'Unsupported request.')
+                need(self.headers.get_content_type()=='application/octet-stream','Expected recording bytes.',415)
+                try:length=int(self.headers.get('Content-Length','0'));sequence=int(self.query.get('sequence',['-1'])[0])
+                except ValueError:raise APIError('Invalid recording chunk.')
+                need(0<length<=8*1024**2,'Recording chunk too large.',413)
+                payload=self.rfile.read(length);need(len(payload)==length,'Incomplete recording chunk.')
+                self.send(RECORDING_STORE.chunk(self.query.get('id',[''])[0],self.user['id'],sequence,payload));return
             if post and self.path_only=='/api/admin/files/upload':
                 self.send(self.handle_file_upload()); return
             if post and self.path_only=='/api/overlay/board':
@@ -1075,7 +1101,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.send({'ok':True,'drawing':bool(room['drawing'])}); return
                 if self.path_only=='/api/teacher-app/media-command':
                     command=str(app_data.get('command','')).strip().lower()
-                    need(command in ('mic-toggle','camera-toggle'),'Invalid media command.')
+                    need(command in ('mic-toggle','camera-toggle','record-request','record-pause','record-resume','record-stop'),'Invalid media command.')
                     room['teacher_command_seq']=int(room.get('teacher_command_seq',0))+1
                     seq=room['teacher_command_seq']
                     room.setdefault('teacher_commands',[]).append({'seq':seq,'command':command,'at':time.time()})
@@ -1118,6 +1144,35 @@ class Handler(BaseHTTPRequestHandler):
 
     def get_api(self):
         path=self.path_only
+        if path=='/api/admin/recordings':
+            self.require_user(True);return RECORDING_STORE.listing(self.user['id'])
+        if path=='/api/admin/recordings/content':
+            self.require_user(True)
+            record_id=self.query.get('id',[''])[0];token=self.query.get('ticket',[''])[0]
+            grant=self.session.get('recording_tickets',{}).get(token)
+            need(grant and grant['id']==record_id and grant['expires']>time.time(),'Recording access expired. Open playback again.',403)
+            row=RECORDING_STORE.row(record_id,self.user['id'])
+            need(row['state']=='ready' and row['expires']>time.time(),'Recording is not available.',404)
+            try:response=RECORDING_STORE.cloud.open(row,self.headers.get('Range'))
+            except ValueError:raise APIError('Invalid byte range.',416)
+            except RuntimeError:raise APIError('Private cloud storage is unavailable.',503)
+            with response:
+                self.send_response(response.status)
+                for name in ('Content-Length','Content-Range','Accept-Ranges'):
+                    if response.headers.get(name):self.send_header(name,response.headers[name])
+                self.send_header('Content-Type',row['mime'])
+                ext='mp4' if row['mime']=='video/mp4' else 'webm'
+                mode='attachment' if self.query.get('download',['0'])[0]=='1' else 'inline'
+                self.send_header('Content-Disposition',f'{mode}; filename="MathStudio-recording.{ext}"')
+                self.send_header('Cache-Control','private, no-store');self.send_header('X-Content-Type-Options','nosniff')
+                self.send_header('Referrer-Policy','no-referrer');self.end_headers()
+                try:
+                    while True:
+                        block=response.read(256*1024)
+                        if not block:break
+                        self.wfile.write(block)
+                except (BrokenPipeError,ConnectionResetError):pass
+            return None
         if path=='/api/desktop/setup-status':
             import owner_auth
             limit_requests([('setup-status:'+self.client_ip(),60,60),('setup-status-global',600,60)],'Too many attempts. Try again later.')
@@ -1341,7 +1396,7 @@ class Handler(BaseHTTPRequestHandler):
                 native=room.get('native_screen') or {'active':False,'seq':0,'at':0.0}
                 with db() as c: board=c.execute('SELECT * FROM boards WHERE class_id=?',(cid,)).fetchone()
                 return {'peers':peers,'events':events,'seq':room['seq'],'drawing':room['drawing'],
-                        'presenter':room['presenter'],'forcedMute':bool(current_peer.get('forced_mute')),
+                        'recording':RECORDING_STORE.status(room,peer),'presenter':room['presenter'],'forcedMute':bool(current_peer.get('forced_mute')),
                         'chat':messages,'chatSeq':room['chat_seq'],
                         'teacherCommands':commands,'teacherCommandSeq':int(room.get('teacher_command_seq',0)),
                         'nativeShare':{'active':bool(native.get('active')),'seq':int(native.get('seq',0)),'at':float(native.get('at',0.0))},
@@ -1363,7 +1418,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/teacher/translations':self.send_redirect('/teacher');return None
         if path=='/build_info.js':
             self.send(('export const BUILD_ID='+json.dumps(BUILD_ID)+'; export const ASSET_VERSION='+json.dumps(ASSET_VERSION)+';').encode(),mime='text/javascript; charset=utf-8');return None
-        files={'/teacher':'teacher.html','/teacher_page.js':'teacher_page.js','/':'index.html' ,'/app.js':'app.js','/web_i18n.js':'web_i18n.js','/locales.js':'locales.js','/public_content.js':'public_content.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
+        files={'/recordings':'recordings.html','/recordings.js':'recordings.js','/classroom_recorder.js':'classroom_recorder.js','/teacher':'teacher.html','/teacher_page.js':'teacher_page.js','/':'index.html' ,'/app.js':'app.js','/web_i18n.js':'web_i18n.js','/locales.js':'locales.js','/public_content.js':'public_content.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
         if path not in files and path in ('/booking','/login','/signup','/account','/classroom','/resources','/messages','/join'): path='/'
         need(path in files,'Page not found.',404)
         f=ROOT/files[path]; mime=mimetypes.guess_type(f.name)[0] or 'application/octet-stream'
@@ -1375,6 +1430,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def post_api(self,d):
         path=self.path_only
+        if path.startswith('/api/admin/recordings/'):
+            self.require_user(True)
+            if path=='/api/admin/recordings/handoff':
+                with LOCK:
+                    for key,item in list(RECORDING_HANDOFFS.items()):
+                        if item['expires']<=time.time():RECORDING_HANDOFFS.pop(key,None)
+                    need(len(RECORDING_HANDOFFS)<256,'Too many recording links.',429)
+                    token=secrets.token_urlsafe(32)
+                    record_id=d.get('id','');RECORDING_STORE.row(record_id,self.user['id'])
+                    RECORDING_HANDOFFS[token]={**token_claims(self.user,self.sid),'expires':time.time()+60,'record_id':record_id,'download':d.get('download') is True}
+                return {'url':'/teacher-recordings-login?token='+quote(token)}
+            record_id=d.get('id','');row=RECORDING_STORE.row(record_id,self.user['id'])
+            if path=='/api/admin/recordings/finish':
+                return RECORDING_STORE.finalize(record_id,self.user['id'],d.get('complete'),d.get('duration',0))
+            if path=='/api/admin/recordings/delete':
+                RECORDING_STORE.delete(record_id,self.user['id']);return {'ok':True}
+            if path=='/api/admin/recordings/access':
+                need(row['state']=='ready' and row['expires']>time.time(),'Recording is not ready.',409)
+                tickets=self.session.setdefault('recording_tickets',{})
+                for key,item in list(tickets.items()):
+                    if item['expires']<=time.time():tickets.pop(key,None)
+                need(len(tickets)<8,'Too many playback requests. Wait a minute.',429)
+                token=secrets.token_urlsafe(32);tickets[token]={'id':record_id,'expires':time.time()+60}
+                return {'url':'/api/admin/recordings/content?id='+record_id+'&ticket='+token,'expires_in':60}
+            raise APIError('Unknown recording action.',404)
+
         if path=='/api/desktop/setup':
             import owner_auth
             limit_requests([('pairing:'+self.client_ip(),5,900),('pairing-global',30,900)],'Too many setup attempts. Wait fifteen minutes.')
@@ -1897,6 +1978,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.room_access(cid)
                 room=room_for(cid); clean_room(room)
                 if path=='/api/room/join':
+                    RECORDING_STORE.before_join(room)
                     # Rejoining in the same browser replaces only that browser's old peer.
                     # A student may join from a second device, and multiple guests/accounts
                     # can be connected at the same time.
@@ -1910,6 +1992,22 @@ class Handler(BaseHTTPRequestHandler):
                     return {'peer':peer,'iceServers':servers,'relayConfigured':relay_configured,
                             'relayProvider':relay_provider,'relayError':relay_error}
                 peer=d.get('peer'); self.owned_peer(room,peer)
+                if path.startswith('/api/room/recording-'):
+                    action=path.rsplit('-',1)[-1]
+                    if action=='request':
+                        self.require_user(True);return RECORDING_STORE.request(room,peer,d.get('consent'))
+                    if action=='consent':return RECORDING_STORE.consent(room,peer,d.get('id'),d.get('accepted'))
+                    if action=='withdraw':
+                        rec=room.get('recording');need(rec and rec['id']==d.get('id'),'Recording request expired.',409)
+                        RECORDING_STORE.stop(room);return RECORDING_STORE.status(room,peer)
+                    need(self.user['role']=='admin','Teacher access required.',403)
+                    if action=='start':return RECORDING_STORE.start(room,peer,self.user['id'],cid,d.get('mime'))
+                    if action=='heartbeat':return RECORDING_STORE.heartbeat(room,peer,d.get('id'))
+                    if action in ('pause','resume'):return RECORDING_STORE.pause(room,peer,action=='pause')
+                    if action=='stop':
+                        rec=room.get('recording');need(rec and rec['owner']==peer,'Only the recording teacher can stop it.',403)
+                        RECORDING_STORE.stop(room,ack=d.get('ack') is True);return {'ok':True}
+                    raise APIError('Unknown recording action.',404)
                 if path=='/api/room/leave':
                     room['peers'].pop(peer,None); clean_room(room); return {'ok':True}
                 if path=='/api/room/signal':
@@ -2001,6 +2099,7 @@ def main():
     except Exception:
         if pairing:pairing.close()
         owner_auth.PAIRING=None;server.server_close(); raise
+    RECORDING_STORE.launch()
     # Show both the same-computer address and a best-effort LAN address so
     # phones/tablets/other computers on the same network know what to open.
     lan_ip = None
@@ -2023,6 +2122,7 @@ def main():
     try: server.serve_forever()
     except KeyboardInterrupt: print('\nStopped.')
     finally:
+        RECORDING_STORE.close()
         server.server_close()
         if pairing:pairing.close()
         owner_auth.PAIRING=None
