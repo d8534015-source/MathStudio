@@ -142,16 +142,16 @@ class RuntimeTests(unittest.TestCase):
             zoneinfo.ZoneInfo('Asia/Shanghai')
         finally:zoneinfo.reset_tzpath(original);zoneinfo.ZoneInfo.clear_cache()
 
-    def test_pkg01_clean_teacher_start_creates_account_then_server(self):
+    def test_pkg01_clean_teacher_start_defers_account_to_paired_authentication(self):
         events=[]
         ns=extracted_functions('teacher_desktop_app.py',{'_bootstrap'},
             {'can_connect':lambda:False,'server_build':lambda:'synthetic-build','BUILD_ID':'synthetic-build',
              'ensure_admin_account':lambda root:events.append('account') or True,
              'start_server_process':lambda:events.append('server') or 'process'})
-        obj=SimpleNamespace(root=SimpleNamespace(deiconify=lambda:None),show_login=lambda:events.append('login'),
+        obj=SimpleNamespace(root=SimpleNamespace(deiconify=lambda:None),open_auth=lambda:events.append('login'),
             show_server_offline=lambda message:events.append('offline'))
         MethodType(ns['_bootstrap'],obj)()
-        self.assertEqual(events,['account','server','login'])
+        self.assertEqual(events,['server','login'])
 
     def test_pkg01_matching_server_is_reused_and_mismatch_never_started(self):
         for build,expected in [('synthetic-build',['login']),('different',['offline'])]:
@@ -160,7 +160,7 @@ class RuntimeTests(unittest.TestCase):
                 {'can_connect':lambda:True,'server_build':lambda:build,'BUILD_ID':'synthetic-build',
                  'ensure_admin_account':lambda root:events.append('account'),
                  'start_server_process':lambda:events.append('server')})
-            obj=SimpleNamespace(root=SimpleNamespace(deiconify=lambda:None),show_login=lambda:events.append('login'),
+            obj=SimpleNamespace(root=SimpleNamespace(deiconify=lambda:None),open_auth=lambda:events.append('login'),
                 show_server_offline=lambda message:events.append('offline'))
             MethodType(ns['_bootstrap'],obj)();self.assertEqual(events,expected)
 

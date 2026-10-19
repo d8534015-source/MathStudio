@@ -126,7 +126,7 @@ class PublicTranslations(BackendCase):
         self.assertEqual(self.request('/api/admin/course-description', body, self.client('student'))[0], 403)
         self.assertEqual(self.request('/api/admin/course-description', body, self.teacher)[0], 200)
         self.assertEqual(next(x['original'] for x in self.state()['sources'] if x['key'] == f'courses:{lid}:description'), body['description'])
-        self.assertEqual(self.request('/api/desktop-info')[1]['build'], 'v41.6.6-delivery-candidate1')
+        self.assertEqual(self.request('/api/desktop-info')[1]['build'], self.app.BUILD_ID)
 
     def test_provider_config_rejects_non_https_credential_urls_and_redirects(self):
         for url in ['http://example.org/translate', 'https://user:password@example.org/translate', 'https://example.org/translate?key=secret']:

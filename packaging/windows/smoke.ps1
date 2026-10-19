@@ -42,6 +42,7 @@ try {
         Check (Test-Path -LiteralPath $report) 'Bundled self-test evidence written'
         $data=Get-Content -LiteralPath $report -Raw -Encoding UTF8 | ConvertFrom-Json
         Check ($data.website_management -and $data.client_only) 'Frozen Website Management module and client-only role'
+        Check ($data.windows_dpapi -and $data.desktop_auth_protocol -eq 1) 'Frozen Windows DPAPI encrypt/decrypt and desktop auth protocol'
         Check ($data.frozen -and -not $data.console) 'Bundled runtime and no console window'
         Copy-Item -LiteralPath $report -Destination (Join-Path $build 'installer\runtime-self-test.json')
     } finally {

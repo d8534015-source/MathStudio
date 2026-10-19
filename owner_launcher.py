@@ -27,14 +27,16 @@ def find_cloudflared():
     raise RuntimeError('Install official cloudflared, or use the LAN-only launcher.')
 
 
-def existing_server():
+def existing_server(port=5051,allow_reuse=True):
     """Check before database initialization; never stop or change a running server."""
     try:
-        with socket.create_connection(('127.0.0.1',5051),timeout=.5):pass
+        with socket.create_connection(('127.0.0.1',port),timeout=.5):pass
     except OSError:return False
+    if not allow_reuse:
+        raise RuntimeError(f'Port {port} is occupied. No process or live lesson was changed.')
     from build_info import BUILD_ID
     try:
-        with urlopen('http://127.0.0.1:5051/api/desktop-info',timeout=3) as r:
+        with urlopen(f'http://127.0.0.1:{port}/api/desktop-info',timeout=3) as r:
             info=json.loads(r.read(65536))
         if info.get('build')==BUILD_ID and info.get('public_origin','').startswith('https://'):
             print('Reusing the running MathStudio OWNER: '+info['public_origin'],flush=True)
@@ -96,14 +98,14 @@ def tunnel_origin(child,timeout=40):
     raise RuntimeError('Cloudflared did not provide an HTTPS address. Check Internet access and official cloudflared setup.')
 
 
-def main(tunnel=True,env=None):
-    if existing_server():return 0
+def main(tunnel=True,env=None,port=5051,bind='0.0.0.0',reuse=True):
+    if existing_server(port,allow_reuse=reuse):return 0
     if env is not None:os.environ.update(env)
-    os.environ.update(PORT='5051',BIND_HOST='0.0.0.0')
+    os.environ.update(PORT=str(port),BIND_HOST=bind)
     child=None
     try:
         if tunnel:
-            child=OwnedProcess([find_cloudflared(),'tunnel','--url','http://127.0.0.1:5051'],
+            child=OwnedProcess([find_cloudflared(),'tunnel','--url',f'http://127.0.0.1:{port}'],
                 stdout=subprocess.PIPE,stderr=subprocess.STDOUT,stdin=subprocess.DEVNULL,
                 text=True,encoding='utf-8',errors='replace',
                 creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))

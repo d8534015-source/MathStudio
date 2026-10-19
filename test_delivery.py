@@ -24,7 +24,7 @@ class RemoteClientTests(unittest.TestCase):
         for build in ('same','wrong'):
             events.clear()
             obj=SimpleNamespace(remote=True,root=SimpleNamespace(deiconify=lambda:None),tr=lambda s:s,
-                client=SimpleNamespace(base='https://owner.example',json=lambda path:{'build':build}),show_login=lambda:events.append('login'),
+                client=SimpleNamespace(base='https://owner.example',json=lambda path:{'build':build}),open_auth=lambda:events.append('login'),
                 show_server_offline=lambda message:events.append('offline'))
             MethodType(ns['_bootstrap'],obj)()
             self.assertEqual(events,['login'] if build=='same' else ['offline'])
@@ -118,7 +118,7 @@ class ConnectionValidationTests(unittest.TestCase):
             {'messagebox':SimpleNamespace(askyesno=lambda *a,**kw:True),'APP_TITLE':'Test',
              'select_origin':lambda **kw:'https://new.example','os':os,
              'APIClient':lambda origin:SimpleNamespace(base=origin)})
-        obj=SimpleNamespace(root=root,tr=lambda s:s,client=SimpleNamespace(base='https://old.example',json=lambda *a,**kw:events.append('logout')),
+        obj=SimpleNamespace(root=root,tr=lambda s:s,client=SimpleNamespace(base='https://old.example',logout=lambda:events.append('logout')),
             message_poll_job='chat',_active_poll_job='classes',_bootstrap=lambda:events.append('connect'))
         with mock.patch.dict(os.environ,{}):MethodType(ns['change_owner_server'],obj)()
         self.assertEqual(obj.client.base,'https://new.example');self.assertEqual(obj.student_origin,'https://new.example')

@@ -277,6 +277,8 @@ def init():
         CREATE INDEX IF NOT EXISTS instant_meetings_class_idx ON instant_meetings(class_id);
         ''')
         public_translations.initialize(c)
+        import owner_auth
+        owner_auth.schema(c)
         # Additive booking migration. Existing fixed classes remain confirmed appointments.
         columns={r['name'] for r in c.execute('PRAGMA table_info(classes)')}
         for name,sql in (
@@ -610,6 +612,9 @@ def validate_token_user(item,c,cl,admin=False):
     need(user and user['id']==item['uid'] and user['role']==item['role']
          and hmac.compare_digest(credential_version(user),item.get('credential_version','')),
          'Teacher or annotation authorization expired. Sign in again.',403)
+    if session.get('remember_id'):
+        import owner_auth
+        need(owner_auth.session_valid(c,session['remember_id'],user),'Teacher or annotation authorization expired. Sign in again.',403)
     if admin: need(user['role']=='admin','Admin access required.',403)
     if user['role']!='admin':
         access=session.get('instant_access',{}).get(str(cl['id']),{})
@@ -884,6 +889,11 @@ class Handler(BaseHTTPRequestHandler):
                 SESSIONS[self.sid]=self.session
         with db() as c:
             self.user=c.execute('SELECT * FROM users WHERE id=?',(self.session.get('user'),)).fetchone() if self.session.get('user') else None
+            if self.session.get('remember_id'):
+                import owner_auth
+                if not owner_auth.session_valid(c,self.session['remember_id'],self.user):
+                    self.rotate(None)
+                    self.user=None
         if self.user is None and isinstance(self.session.get('guest_identity'),dict):
             guest=self.session['guest_identity']
             self.user={'id':guest.get('id'),'username':'guest','name':guest.get('name','Guest'),'role':'guest'}
@@ -1108,6 +1118,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def get_api(self):
         path=self.path_only
+        if path=='/api/desktop/setup-status':
+            import owner_auth
+            limit_requests([('setup-status:'+self.client_ip(),60,60),('setup-status-global',600,60)],'Too many attempts. Try again later.')
+            with db() as c:return {'initialized':owner_auth.initialized(c)}
         if path=='/api/desktop-info': return {'build':BUILD_ID,'port':PORT,'public_origin':current_public_origin(),'lan_origin':f'http://{self.server.server_address[0] if self.server.server_address[0] not in ("0.0.0.0","::") else "127.0.0.1"}:{PORT}','cloudflare_turn_configured':bool(os.environ.get('CLOUDFLARE_TURN_KEY_ID','').strip() and os.environ.get('CLOUDFLARE_TURN_API_TOKEN','').strip())}
         if path=='/api/me': return {'user':public_user(self.user),'csrf':self.session['csrf']}
         if path=='/api/content-translations':
@@ -1361,6 +1375,71 @@ class Handler(BaseHTTPRequestHandler):
 
     def post_api(self,d):
         path=self.path_only
+        if path=='/api/desktop/setup':
+            import owner_auth
+            limit_requests([('pairing:'+self.client_ip(),5,900),('pairing-global',30,900)],'Too many setup attempts. Wait fifteen minutes.')
+            code=d.get('pairing','')
+            need(owner_auth.PAIRING is not None and owner_auth.PAIRING.valid(code),'Pairing authorization is invalid or expired.',403)
+            username=field(d,'username',3,40).lower()
+            need(re.fullmatch(r'[a-z0-9_]{3,40}',username),'Username: use letters, numbers, and underscores.')
+            name=field(d,'name',1,80)
+            password=d.get('password')
+            need(isinstance(password,str) and 12<=len(password)<=256,'Use 12–256 characters.')
+            hashed=hash_password(password)
+            with LOCK:
+                with db() as c:
+                    c.execute('BEGIN IMMEDIATE')
+                    need(not owner_auth.initialized(c),'OWNER is already initialized.',409)
+                    need(owner_auth.PAIRING.valid(code),'Pairing authorization is invalid or expired.',403)
+                    try:r=c.execute("INSERT INTO users(username,name,password,role) VALUES (?,?,?,'admin')",(username,name,hashed))
+                    except sqlite3.IntegrityError:raise APIError('That username is already in use.',409)
+                    uid=r.lastrowid
+                    c.execute("INSERT OR REPLACE INTO settings VALUES ('owner_initialized','1')")
+                owner_auth.PAIRING.consume()
+                self.rotate(uid)
+            with db() as c:u=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
+            return {'user':public_user(u),'csrf':self.session['csrf']}
+        if path=='/api/desktop/remember':
+            import owner_auth
+            self.require_user(admin=True)
+            self.limit_auth(self.user['username'])
+            password=d.get('password','')
+            need(isinstance(password,str) and len(password)<=256 and check_password(self.user['password'],password),'Re-enter your password to remember this device.',401)
+            device=field(d,'device',64,64)
+            need(re.fullmatch('[0-9a-f]{64}',device),'Invalid device credential.')
+            with db() as c:
+                c.execute('BEGIN IMMEDIATE')
+                try:token=owner_auth.issue(c,self.user,device)
+                except ValueError as error:raise APIError(str(error),409)
+                old=self.session.get('remember_id')
+                if old:c.execute('DELETE FROM desktop_credentials WHERE selector=?',(old,))
+            self.session['remember_id']=token.split('.')[0]
+            return {'refresh':token,'csrf':self.session['csrf']}
+        if path=='/api/desktop/refresh':
+            import owner_auth
+            limit_requests([('refresh:'+self.client_ip(),30,300),('refresh-global',600,300)],'Too many attempts. Wait five minutes.')
+            token=field(d,'refresh',50,150);device=field(d,'device',64,64)
+            with LOCK:
+                with db() as c:
+                    c.execute('BEGIN IMMEDIATE')
+                    result=owner_auth.rotate(c,token,device)
+                need(result,'Remembered login expired or was revoked. Sign in again.',401)
+                user,token=result
+                selector=token.split('.')[0]
+                for sid in list(SESSIONS):
+                    if SESSIONS[sid].get('remember_id')==selector:
+                        SESSIONS.pop(sid,None);revoke_tokens(session=sid)
+                self.rotate(user['id'])
+                self.session['remember_id']=selector
+            return {'user':public_user(user),'csrf':self.session['csrf'],'refresh':token}
+        if path=='/api/desktop/forget':
+            self.require_user(admin=True)
+            selected=d.get('refresh','')
+            need(isinstance(selected,str) and len(selected)<=150,'Invalid device credential.')
+            selector=selected.split('.')[0] if selected else self.session.get('remember_id','')
+            with db() as c:c.execute('DELETE FROM desktop_credentials WHERE selector=? AND user_id=?',(selector,self.user['id']))
+            uid=self.user['id'];self.rotate(uid)
+            return {'ok':True,'csrf':self.session['csrf']}
         if path=='/api/instant/join':
             self.limit_meeting_code()
             code=re.sub(r'\D','',str(d.get('code','')))
@@ -1403,6 +1482,8 @@ class Handler(BaseHTTPRequestHandler):
                 u=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
             return {'user':public_user(u),'csrf':self.session['csrf']}
         if path=='/api/logout':
+            if self.session.get('remember_id'):
+                with db() as c:c.execute('DELETE FROM desktop_credentials WHERE selector=?',(self.session['remember_id'],))
             with LOCK:
                 for room in ROOMS.values():
                     for key in list(room['peers']):
@@ -1899,18 +1980,24 @@ def main():
     if sys.argv[1:]==['add-admin']: return cli_account()
     if sys.argv[1:]==['reset-password']: return cli_account(True)
     if sys.argv[1:]: raise SystemExit('Usage: py server.py [add-admin|reset-password]')
-    with db() as c: missing=not c.execute("SELECT 1 FROM users WHERE role='admin'").fetchone()
-    if missing:
-        if os.environ.get('MATH_DESKTOP_MODE')=='1':
-            raise SystemExit('No teacher account exists. Run OPEN MATHSTUDIO TEACHER.bat to create one.')
-        print('Create the first teacher/admin account:'); cli_account()
+    import owner_auth
+    with db() as c: missing=not owner_auth.initialized(c)
     try: server=ThreadingHTTPServer((BIND,PORT),Handler)
     except OSError as ex: raise SystemExit(f'Could not open port {PORT}: {ex}. Stop the program already using that port first.')
+    pairing=None
+    try:
+        if missing:
+            owner_auth.PAIRING=owner_auth.Pairing()
+            pairing=owner_auth.pairing_window(owner_auth.PAIRING.code)
+            print('First-time Teacher Setup: enter the one-time authorization from the local OWNER pairing window in MathStudio Teacher. It expires in 15 minutes.',flush=True)
+    except BaseException:
+        owner_auth.PAIRING=None;server.server_close();raise
     # A failed duplicate launch must not mutate the running server's classes.
     try:
         with db() as c: c.execute('UPDATE classes SET live=0')
     except Exception:
-        server.server_close(); raise
+        if pairing:pairing.close()
+        owner_auth.PAIRING=None;server.server_close(); raise
     # Show both the same-computer address and a best-effort LAN address so
     # phones/tablets/other computers on the same network know what to open.
     lan_ip = None
@@ -1932,6 +2019,9 @@ def main():
     print('Leave this terminal open. Ctrl+C stops the server.')
     try: server.serve_forever()
     except KeyboardInterrupt: print('\nStopped.')
-    finally: server.server_close()
+    finally:
+        server.server_close()
+        if pairing:pairing.close()
+        owner_auth.PAIRING=None
 
 if __name__=='__main__': main()

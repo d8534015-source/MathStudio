@@ -30,7 +30,7 @@ def assets(review=False):
     draw.rounded_rectangle((8,8,248,248),radius=48,fill='#0d2f34',outline='#22a699',width=10)
     draw.line([(55,190),(55,65),(128,145),(201,65),(201,190)],fill='#dff5ed',width=20,joint='curve')
     image.save(target/'MathStudio.ico',sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
-    (target/'version.txt').write_text("""VSVersionInfo(ffi=FixedFileInfo(filevers=(41,6,6,0),prodvers=(41,6,6,0),mask=0x3f,flags=0,OS=0x40004,fileType=1,subtype=0,date=(0,0)),kids=[StringFileInfo([StringTable('040904B0',[StringStruct('FileDescription','MathStudio Teacher'),StringStruct('FileVersion','41.6.6'),StringStruct('ProductName','MathStudio'),StringStruct('ProductVersion','41.6.6'),StringStruct('OriginalFilename','MathStudioClient.exe')])]),VarFileInfo([VarStruct('Translation',[1033,1200])])])""",encoding='utf-8')
+    (target/'version.txt').write_text("""VSVersionInfo(ffi=FixedFileInfo(filevers=(41,6,6,0),prodvers=(41,6,6,0),mask=0x3f,flags=0,OS=0x40004,fileType=1,subtype=0,date=(0,0)),kids=[StringFileInfo([StringTable('040904B0',[StringStruct('CompanyName','MathStudio project'),StringStruct('FileDescription','MathStudio Teacher Review'),StringStruct('FileVersion','41.6.6'),StringStruct('ProductName','MathStudio'),StringStruct('ProductVersion','41.6.6'),StringStruct('OriginalFilename','MathStudioClient.exe')])]),VarFileInfo([VarStruct('Translation',[1033,1200])])])""",encoding='utf-8')
 
 
 def main():
@@ -70,6 +70,7 @@ def main():
     inventory={str(p.relative_to(output/'dist')):hashlib.sha256(p.read_bytes()).hexdigest()
         for p in (output/'dist').rglob('*') if p.is_file()}
     (installer.parent/'build-manifest.json').write_text(json.dumps({'build':BUILD_ID,'python':sys.version,'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True,encoding='utf-8').strip(),
+        'review_head_commit':os.environ.get('REVIEW_HEAD_SHA') or None,
         'source_manifest_sha256':hashlib.sha256((ROOT/'release_manifest.json').read_bytes()).hexdigest(),
         'requirements_sha256':hashlib.sha256((ROOT/'requirements.txt').read_bytes()).hexdigest(),
         'build_requirements_sha256':hashlib.sha256((HERE/'requirements-build.txt').read_bytes()).hexdigest(),

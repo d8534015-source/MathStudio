@@ -101,8 +101,9 @@ def start(state):
             raise RuntimeError('Review port 5059 is occupied; no existing server was changed.') from None
     python = str(python_at(state/'owner-runtime'))
     run(state, [python, '-c', 'from dependency_check import verify_runtime; verify_runtime()'])
-    print(f'Isolated review only: http://127.0.0.1:{PORT}\nUse new synthetic teacher/student accounts. Ctrl+C stops review.', flush=True)
-    run(state, [python, str(ROOT/'server.py')])
+    print('Starting isolated review with an official Cloudflare Quick Tunnel.\nUse synthetic accounts only. Ctrl+C stops review and its own tunnel.', flush=True)
+    run(state, [python, '-c', 'from owner_launcher import main; '
+               'raise SystemExit(main(port=5059,bind="127.0.0.1",reuse=False))'])
 
 
 def main():

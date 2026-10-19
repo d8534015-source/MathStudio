@@ -348,3 +348,25 @@ ZH.update({
   "Offline translation failed. Original content is unchanged.": "离线翻译失败，原文未变。",
   "Offline translation result is too large.": "离线翻译结果过长。"
 })
+
+# PR #9 desktop pairing and optional persistent login. Authored content is untouched.
+ZH.update({
+    'First-Time Teacher Setup':'首次教师设置',
+    'Enter the one-time authorization from the local OWNER pairing window.':'请输入本机 OWNER 配对窗口显示的一次性授权码。',
+    'Teacher name':'教师姓名', 'Repeat password':'再次输入密码', 'OWNER pairing code':'OWNER 配对码',
+    'Create teacher account':'创建教师账户', 'Sign in instead':'改为登录',
+    'Remember me on this device':'在此设备上记住我',
+    'Disable Remember Me on this device':'关闭此设备的记住我',
+    'Remember Me disabled. Your next app restart will require login.':'已关闭记住我。下次启动应用时需要重新登录。',
+    'Could not confirm logout. Check your connection and retry.':'无法确认退出登录。请检查网络连接后重试。',
+    'Windows could not save Remember Me. Sign in without it.':'Windows 无法保存记住我。请取消此选项后登录。',
+    'Remembered login expired or was revoked. Sign in again.':'已保存的登录已过期或被撤销，请重新登录。',
+    'Pairing authorization is invalid or expired.':'配对授权码无效或已过期。',
+    'OWNER is already initialized.':'OWNER 已完成初始化。',
+    'Too many setup attempts. Wait fifteen minutes.':'设置尝试次数过多，请等待十五分钟。',
+    'Re-enter your password to remember this device.':'请重新输入密码以记住此设备。',
+    'Too many remembered devices. Sign out on another device first.':'已记住的设备过多，请先在另一台设备上退出登录。',
+    'Use 12–256 characters.':'请使用 12 至 256 个字符。',
+    'Teacher setup did not complete.':'教师设置未完成。',
+    'Previous OWNER is unreachable. Local Remember Me was cleared; remote logout is unconfirmed. Reset the OWNER password to revoke old devices if needed.':'无法访问原 OWNER。已清除此设备的记住我，但尚未确认远程退出。如需撤销旧设备，请重置 OWNER 密码。',
+})

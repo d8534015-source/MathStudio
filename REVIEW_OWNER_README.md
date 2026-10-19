@@ -1,6 +1,6 @@
 # PR #9 Windows OWNER server review
 
-This is complete OWNER source for PR #9, including PR #8's Argos/MiniSBD,
+This is complete OWNER source for PR #9's paired-login review, including PR #8's Argos/MiniSBD,
 UTF-8 input and private-file worker-response fixes. It is a review candidate,
 not a production upgrade or a teacher-only package. No EXE, accounts,
 databases, credentials, Python environments or language models are bundled.
@@ -29,15 +29,36 @@ databases, credentials, Python environments or language models are bundled.
    It verifies the copied interpreter uses the copied packages, checks model
    readiness and runs two offline translations in **each direction**. Success
    is reported only after all these checks pass.
-6. Double-click **REVIEW OWNER START.bat**. Create a **new test-only** admin
-   using the console prompts. Open **http://127.0.0.1:5059**. The existing
-   OWNER on port 5051 is neither reused nor stopped. If 5059 is busy, startup
-   refuses it. Ctrl+C stops only the review server.
+6. Install official Cloudflare `cloudflared` if not already present:
+   `winget install --id Cloudflare.cloudflared --exact`. Open a new console
+   afterwards and check `cloudflared --version`. No tunnel executable is
+   bundled, no DNS changes are needed, and no security settings are disabled.
+7. Double-click **REVIEW OWNER START.bat**. OWNER opens a local pairing
+   window if it has never been initialized, and prints a temporary
+   **https://...trycloudflare.com** address. It never requests a teacher
+   password in the console. Port 5059 remains loopback; the existing OWNER
+   on 5051 is neither reused nor stopped. If 5059 is busy, startup refuses it.
+   A failed tunnel startup never calls backend initialization. Ctrl+C stops
+   only this review OWNER and its own tunnel/pairing window.
+8. Install the matching **MathStudio Review** teacher installer into its
+   default separate folder. Enter the HTTPS address in the app. In
+   **First-Time Teacher Setup**, explicitly enter the code from the local
+   OWNER window and create a new synthetic teacher account. The code expires
+   in 15 minutes, is consumed once, and is never put in URLs or console logs.
+   If lost or expired, stop/restart only the review OWNER to issue a new code.
+   An initialized OWNER never offers account creation again, even on restart.
+9. Optionally check **Remember me on this device** (initially unchecked).
+   Windows DPAPI protects a rotating, revocable credential; no password is
+   stored. Idle expiration is 7 days and absolute expiration is 30 days.
+   Password/role changes or revocation require login again. Settings can
+   disable Remember Me; **Sign out** revokes it. Network failures do not
+   count as confirmed logout: reconnect and retry.
 
 Only use synthetic public descriptions/accounts/files. The review server binds
-loopback, starts no tunnel, and inherits no TURN/R2 credentials. This is not a
-public HTTPS or physical-device classroom deployment. It has no configured
-TURN relay; do not treat this package as a production media acceptance test.
+loopback behind an owned **temporary test tunnel**, and inherits no TURN/R2
+credentials. Do not share the pairing code or use private student information.
+It has no configured TURN relay; cross-network media may need separately
+configured test TURN credentials. No production media acceptance is claimed.
 The Teacher Website Management desktop UI is source-included; its separately
 delivered PR #9 review teacher installer is **not** included in this OWNER ZIP.
 See `WEBSITE_MANAGEMENT.md` for its content/translation review workflow.
@@ -89,12 +110,15 @@ The delivery checksum file covers the ZIP itself. In PowerShell:
 Get-FileHash .\MathStudio_v41_6_6_OWNER_PR9_Review.zip -Algorithm SHA256
 ```
 
-The inherited source passed 155 Linux regression tests; Windows CI ran 155
-tests (151 passed, 4 optional OWNER-stack skips). Packaging isolation tests
-are recorded in the adjacent delivery verification report. The new review
-setup/start scripts have not been executed on physical Windows in this Cloud
-session. Actual translations with your installed models must pass the local
-setup checks; no Windows/model success is inferred from synthetic tests.
+The matching delivery report records final local and Windows CI results.
+Physical Windows 11/mobile media acceptance and live Quick Tunnel reachability
+must be distinguished from mocked lifecycle tests. Actual translations with
+your installed models must pass the local setup checks. Quick Tunnel addresses
+change after restart: use Connection settings to select the new address;
+remembered credentials are scoped to the exact origin and review profile.
+
+See `PR9_PAIRING_REVIEW.md` for security boundaries, signing/SmartScreen,
+regression coverage, changed-file purposes and remaining manual acceptance.
 
 Use only the two **REVIEW OWNER** launchers for this isolated test. Other
 legacy/production setup scripts are included for source completeness and are
