@@ -33,6 +33,30 @@ def safe_diagnostic(error):
     return '; '.join(details)[:1500]
 
 
+def compatible_stanza_resources(resources):
+    # Older bundled tokenizers name defaults directly; Stanza 1.10 expects packages.
+    # Adapt only that known schema, without changing models or inventing defaults.
+    result=resources.copy()
+    for lang,info in resources.items():
+        if isinstance(info,dict) and 'packages' not in info and isinstance(info.get('default_processors'),dict):
+            result[lang]={**info,'packages':{'default':dict(info['default_processors'])}}
+    return result
+
+
+def offline_stanza_pipeline(pipeline,*args,**kwargs):
+    from stanza.pipeline import core
+    loader=core.load_resources_json
+    def load_compatible(*load_args,**load_kwargs):
+        return compatible_stanza_resources(loader(*load_args,**load_kwargs))
+    kwargs['download_method']=None
+    # This patch is confined to the single inference child and this initialization.
+    core.load_resources_json=load_compatible
+    try:
+        return pipeline(*args,**kwargs)
+    finally:
+        core.load_resources_json=loader
+
+
 def run(payload):
     # Set before optional imports. Missing resources must fail, never fetch anything.
     socket.socket.connect = deny_network
@@ -45,8 +69,7 @@ def run(payload):
     import stanza
     original_pipeline = stanza.Pipeline
     def offline_pipeline(*args, **kwargs):
-        kwargs['download_method'] = None
-        return original_pipeline(*args, **kwargs)
+        return offline_stanza_pipeline(original_pipeline,*args,**kwargs)
     stanza.Pipeline = offline_pipeline
     from argostranslate import translate
     from opencc import OpenCC

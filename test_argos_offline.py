@@ -2,6 +2,7 @@
 import concurrent.futures
 import contextlib
 import io
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ from unittest import mock
 import zipfile
 import argos_runtime as ar
 import argos_setup as setup
+import argos_worker as worker
 import public_translations as pt
 from test_security_stability import BackendCase
 
@@ -125,6 +127,45 @@ runpy.run_path(sys.argv[1],run_name='__main__')
         self.assertIn('errno=2',result.stderr);self.assertIn('synthetic_failure:',result.stderr)
         for private in ['synthetic-secret','student text','Private Name','private-model','Traceback']:
             self.assertNotIn(private,result.stderr)
+
+    def test_stanza_legacy_defaults_adapt_without_mutating_resources_or_modern_packages(self):
+        legacy={'en':{'tokenize':{'ewt':{}},'default_processors':{'tokenize':'ewt'}}}
+        before=json.dumps(legacy,sort_keys=True)
+        adapted=worker.compatible_stanza_resources(legacy)
+        self.assertEqual(adapted['en']['packages'],{'default':{'tokenize':'ewt'}})
+        self.assertEqual(json.dumps(legacy,sort_keys=True),before)
+        modern={'en':{'packages':{'default':{'tokenize':'combined'}},'default_processors':{'tokenize':'ewt'}}}
+        self.assertEqual(worker.compatible_stanza_resources(modern),modern)
+        unknown={'en':{'tokenize':{'ewt':{}}}}
+        self.assertEqual(worker.compatible_stanza_resources(unknown),unknown)
+
+    @unittest.skipUnless(importlib.util.find_spec('stanza'),'Optional installed Stanza runtime required')
+    def test_actual_stanza_legacy_resource_initialization_both_languages_stays_offline(self):
+        import stanza
+        from stanza.pipeline import core
+        original_loader=core.load_resources_json
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'resources.json'
+            for lang,model in [('en','ewt'),('zh','gsdsimp')]:
+                with self.subTest(lang=lang):
+                    resources={lang:{'lang_name':'Synthetic','tokenize':{model:{}},'default_processors':{'tokenize':model}}}
+                    path.write_text(json.dumps(resources),encoding='utf-8');original=path.read_bytes()
+                    # Prove the reported failure using real Stanza before the adapter.
+                    with self.assertRaisesRegex(KeyError,'packages'):
+                        stanza.Pipeline(lang=lang,dir=folder,processors='tokenize',use_gpu=False,download_method=None,logging_level='ERROR')
+                    # Only tensor loading is mocked; resource/processor resolution is real.
+                    with mock.patch.dict(core.NAME_TO_PROCESSOR_CLASS,{'tokenize':mock.Mock()}),mock.patch.object(core,'download_resources_json',side_effect=AssertionError('No resource download')),mock.patch.object(core,'download_models',side_effect=AssertionError('No model download')),mock.patch('socket.create_connection',side_effect=AssertionError('No network')):
+                        pipeline=worker.offline_stanza_pipeline(stanza.Pipeline,lang=lang,dir=folder,processors='tokenize',use_gpu=False,logging_level='ERROR')
+                    self.assertIs(pipeline.download_method,core.DownloadMethod.NONE)
+                    self.assertEqual([name for name,_ in pipeline.load_list],['tokenize'])
+                    self.assertEqual(pipeline.load_list[0][1][0].package,model)
+                    self.assertEqual(Path(pipeline.config['tokenize_model_path']),Path(folder)/lang/'tokenize'/(model+'.pt'))
+                    self.assertFalse(pipeline.config.get('tokenize_pretokenized',False))
+                    self.assertEqual(path.read_bytes(),original);self.assertIs(core.load_resources_json,original_loader)
+            with mock.patch.object(core,'load_resources_json',side_effect=FileNotFoundError('synthetic missing resource')) as failed_loader:
+                with self.assertRaises(FileNotFoundError):
+                    worker.offline_stanza_pipeline(stanza.Pipeline,lang='en',dir=folder,processors='tokenize')
+                self.assertIs(core.load_resources_json,failed_loader)
 
     def test_self_test_diagnostics_and_response_validation_fail_closed(self):
         good=subprocess.CompletedProcess([],0,json.dumps({'pieces':['翻译']}),'')
