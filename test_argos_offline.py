@@ -1,4 +1,5 @@
 """OWNER offline regressions: synthetic data only; model downloads are never used here."""
+import copy
 import concurrent.futures
 import contextlib
 import io
@@ -27,7 +28,19 @@ class RuntimeTests(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.temp.cleanup);self.addCleanup(self.env.stop)
 
+    def sentence_files(self):
+        profile=copy.deepcopy(ar.PROFILE)
+        folder=Path(self.temp.name)/'sentence-files';folder.mkdir(exist_ok=True)
+        import hashlib
+        for spec in profile['sentence_models'].values():
+            data=b'synthetic sentence model, not real ONNX'
+            (folder/spec['filename']).write_bytes(data)
+            spec['sha256']=hashlib.sha256(data).hexdigest()
+        patch=mock.patch.object(ar,'PROFILE',profile);patch.start();self.addCleanup(patch.stop)
+        return folder
+
     def ready_files(self):
+        sentence_files=self.sentence_files()
         python=ar.python_path();python.parent.mkdir(parents=True);python.touch()
         models={}
         for pair in ('en_zh','zh_en'):
@@ -35,8 +48,10 @@ class RuntimeTests(unittest.TestCase):
             (path/'model').mkdir(parents=True)
             (path/'model'/'model.bin').write_bytes(b'synthetic, not a real model')
             (path/'metadata.json').write_text('{}')
+            sbd=path/'minisbd';sbd.mkdir()
+            spec=ar.PROFILE['sentence_models'][pair];(sbd/spec['filename']).write_bytes((sentence_files/spec['filename']).read_bytes())
             models[pair]={'folder':folder}
-        (Path(self.temp.name)/'installation.json').write_text(json.dumps({'schema':1,'argos':'1.11.0','verified':True,'models':models}))
+        (Path(self.temp.name)/'installation.json').write_text(json.dumps({'schema':2,'profile':ar.PROFILE['id'],'argos':'1.11.0','python':'synthetic-test-runtime','verified':True,'models':models}))
 
     def test_missing_models_and_maintenance_are_lightweight_and_fail_closed(self):
         with mock.patch('subprocess.run') as child:
@@ -56,6 +71,47 @@ class RuntimeTests(unittest.TestCase):
         with mock.patch.dict(os.environ,{'MATH_ARGOS_HOME':str(ar.ROOT/'models')}):
             with self.assertRaises(ar.ArgosError):ar.home()
 
+    def test_readiness_requires_current_profile_and_pinned_sentence_models(self):
+        self.ready_files();base=Path(self.temp.name)
+        receipt=base/'installation.json';info=json.loads(receipt.read_text())
+        info['schema']=1;receipt.write_text(json.dumps(info));self.assertFalse(ar.ready())
+        info['schema']=2;receipt.write_text(json.dumps(info));self.assertTrue(ar.ready())
+        (base/'packages'/'translate-en_zh-1_9'/'minisbd'/'en.onnx').write_bytes(b'corrupt')
+        with mock.patch.object(setup,'download_model') as network:
+            self.assertFalse(ar.ready());network.assert_not_called()
+            with self.assertRaisesRegex(RuntimeError,'checksum'):
+                setup.sentence_model(base,'en_zh',base/'packages'/'translate-en_zh-1_9'/'minisbd',allow_download=False)
+
+    @unittest.skipUnless(importlib.util.find_spec('stanza'),'Optional installed dependency runtime required')
+    def test_legacy_all_caps_is_unsupported_by_stanza110_data_api(self):
+        from stanza.models.tokenization.data import TokenizationDataset
+        dataset=object.__new__(TokenizationDataset)
+        dataset.args={'feat_funcs':['all_caps']}
+        with self.assertRaisesRegex(ValueError,'all_caps'):dataset.para_to_sentences([])
+
+    @unittest.skipUnless(importlib.util.find_spec('minisbd') and os.environ.get('MATH_ARGOS_TEST_SBD_DIR'),'Official local MiniSBD models required')
+    def test_real_minisbd_models_use_argos_supported_api_offline_repeatedly(self):
+        import hashlib
+        import onnxruntime
+        onnxruntime.disable_telemetry_events()
+        from types import SimpleNamespace
+        with mock.patch.dict(os.environ,ar.environment(Path(self.temp.name))):
+            from argostranslate import sbd,settings,translate
+        self.assertEqual(settings.chunk_type,settings.ChunkType.MINISBD)
+        root=Path(os.environ['MATH_ARGOS_TEST_SBD_DIR']);profile=worker.profile()
+        for pair,spec in profile['sentence_models'].items():
+            data=(root/spec['filename']).read_bytes();self.assertEqual(hashlib.sha256(data).hexdigest(),spec['sha256'])
+            folder=Path(self.temp.name)/pair;(folder/'minisbd').mkdir(parents=True)
+            (folder/'minisbd'/spec['filename']).write_bytes(data)
+            pkg=SimpleNamespace(package_path=folder,from_code=pair.split('_')[0])
+            engine=translate.PackageTranslation(None,None,pkg)
+            detector=engine.sentencizer;self.assertIsInstance(detector,sbd.MiniSBDSentencizer)
+            text='We learn mathematics. We solve an equation.' if pair=='en_zh' else '我们学习数学。我们解一个方程。'
+            with mock.patch('stanza.Pipeline',side_effect=AssertionError('No legacy Stanza path')),mock.patch('torch.load',side_effect=AssertionError('No checkpoint conversion')),mock.patch('socket.create_connection',side_effect=AssertionError('No network')):
+                first=detector.split_sentences(text);second=detector.split_sentences(text)
+            self.assertEqual(first,second);self.assertEqual(len(first),2)
+            self.assertEqual(detector.detector.session.get_providers(),['CPUExecutionProvider'])
+
     def test_process_scrubs_credentials_caps_threads_and_preserves_tokens(self):
         self.ready_files()
         token='MSKEEP'+'A'*24+'X0END'
@@ -65,6 +121,8 @@ class RuntimeTests(unittest.TestCase):
                 self.assertFalse(any('KEY' in key or 'TOKEN' in key for key in kwargs['env']))
                 self.assertEqual(kwargs['env']['ARGOS_INTRA_THREADS'],'1')
                 self.assertEqual(kwargs['env']['ARGOS_DEVICE_TYPE'],'cpu')
+                self.assertEqual(kwargs['env']['ARGOS_CHUNK_TYPE'],'MINISBD')
+                self.assertIs(kwargs['stderr'],subprocess.DEVNULL)
                 self.assertEqual(Path(kwargs['env']['USERPROFILE']).resolve(),Path(self.temp.name).resolve())
                 self.assertEqual(kwargs['timeout'],30)
                 self.assertEqual(Path(kwargs['cwd']).resolve(),Path(self.temp.name).resolve())
@@ -128,115 +186,14 @@ runpy.run_path(sys.argv[1],run_name='__main__')
         for private in ['synthetic-secret','student text','Private Name','private-model','Traceback']:
             self.assertNotIn(private,result.stderr)
 
-    def test_stanza_legacy_defaults_adapt_without_mutating_resources_or_modern_packages(self):
-        legacy={'en':{'tokenize':{'ewt':{}},'default_processors':{'tokenize':'ewt'}}}
-        before=json.dumps(legacy,sort_keys=True)
-        adapted=worker.compatible_stanza_resources(legacy)
-        self.assertEqual(adapted['en']['packages'],{'default':{'tokenize':'ewt'}})
-        self.assertEqual(json.dumps(legacy,sort_keys=True),before)
-        modern={'en':{'packages':{'default':{'tokenize':'combined'}},'default_processors':{'tokenize':'ewt'}}}
-        self.assertEqual(worker.compatible_stanza_resources(modern),modern)
-        unknown={'en':{'tokenize':{'ewt':{}}}}
-        self.assertEqual(worker.compatible_stanza_resources(unknown),unknown)
-
-    def test_legacy_tokenizer_metadata_keeps_weights_and_rejects_unknown_schema(self):
-        config={'vocab_size':3,'emb_dim':2,'hidden_dim':2,'dropout':0.0}
-        legacy={'model':{'synthetic':'unchanged'},'vocab':{'synthetic':'unchanged'},'config':config}
-        adapted=worker.compatible_tokenizer_checkpoint(legacy)
-        self.assertEqual(adapted['config'],dict(config,feat_dropout=0.0))
-        self.assertIsNone(adapted['lexicon']);self.assertNotIn('feat_dropout',config)
-        self.assertNotIn('lexicon',legacy)
-        self.assertIs(adapted['model'],legacy['model']);self.assertIs(adapted['vocab'],legacy['vocab'])
-        modern=dict(legacy,config=dict(config,feat_dropout=0.25),lexicon=['existing'])
-        self.assertIs(worker.compatible_tokenizer_checkpoint(modern),modern)
-        broken_modern=dict(legacy,config=dict(config,feat_dropout=0.25))
-        self.assertIs(worker.compatible_tokenizer_checkpoint(broken_modern),broken_modern)
-        self.assertNotIn('lexicon',broken_modern)
-        malformed=dict(legacy,config={'emb_dim':2})
-        self.assertIs(worker.compatible_tokenizer_checkpoint(malformed),malformed)
-        self.assertIn('missing_key=feat_dropout',worker.safe_diagnostic(KeyError('feat_dropout')))
-        self.assertNotIn('private-secret',worker.safe_diagnostic(KeyError('private-secret')))
-
-    @unittest.skipUnless(importlib.util.find_spec('stanza'),'Optional installed Stanza runtime required')
-    def test_actual_stanza_legacy_checkpoint_loads_strictly_without_changing_tensors(self):
-        import stanza
-        import torch
-        from stanza.pipeline import core
-        from stanza.models.tokenization import trainer
-        from stanza.models.tokenization.model import Tokenizer
-        from stanza.models.tokenization.vocab import Vocab
-        original_torch=trainer.torch
-        with tempfile.TemporaryDirectory() as folder:
-            for lang in ('en','zh'):
-                with self.subTest(lang=lang):
-                    vocab=Vocab([[('a',0)]],lang=lang)
-                    config={'vocab_size':len(vocab),'emb_dim':2,'hidden_dim':2,'dropout':0.0,
-                            'feat_dim':1,'rnn_layers':1,'conv_res':None,'hierarchical':False,
-                            'tok_noise':0.0,'lr0':0.001,'weight_decay':0.0,'lang':lang}
-                    current=dict(config,feat_dropout=0.0,use_mwt=True)
-                    with torch.random.fork_rng(devices=[]):
-                        torch.manual_seed(19)
-                        model=Tokenizer(current,current['vocab_size'],2,2,dropout=0.0,feat_dropout=0.0)
-                    checkpoint={'config':config,'model':model.state_dict(),'vocab':vocab.state_dict()}
-                    model_dir=Path(folder)/lang/'tokenize';model_dir.mkdir(parents=True)
-                    model_file=model_dir/'legacy.pt';torch.save(checkpoint,model_file);original=model_file.read_bytes()
-                    with self.assertRaises(KeyError) as caught:trainer.Trainer(model_file=str(model_file),device='cpu')
-                    self.assertEqual(caught.exception.args,('feat_dropout',))
-                    resources={lang:{'tokenize':{'legacy':{}},'default_processors':{'tokenize':'legacy'}}}
-                    (Path(folder)/'resources.json').write_text(json.dumps(resources),encoding='utf-8')
-                    real_load=torch.load
-                    with mock.patch.object(torch,'load',wraps=real_load) as restricted_load,mock.patch.object(core,'download_resources_json',side_effect=AssertionError('No downloads')),mock.patch.object(core,'download_models',side_effect=AssertionError('No downloads')):
-                        pipeline=worker.offline_stanza_pipeline(stanza.Pipeline,lang=lang,dir=folder,processors='tokenize',use_gpu=False,logging_level='ERROR')
-                    self.assertTrue(restricted_load.called)
-                    self.assertTrue(all(call.kwargs.get('weights_only') is True for call in restricted_load.call_args_list))
-                    loaded=pipeline.processors['tokenize']._trainer
-                    self.assertIsNone(loaded.lexicon);self.assertIsNone(loaded.dictionary)
-                    self.assertEqual(loaded.args['feat_dropout'],0.0)
-                    for name,value in checkpoint['model'].items():
-                        self.assertTrue(torch.equal(loaded.model.state_dict()[name],value),name)
-                    self.assertEqual(model_file.read_bytes(),original);self.assertIs(trainer.torch,original_torch)
-                    # Corrupt weights still fail strict validation; no invented parameters.
-                    del checkpoint['model']['embeddings.weight'];torch.save(checkpoint,model_file)
-                    with self.assertRaisesRegex(RuntimeError,'Missing key'):
-                        worker.offline_stanza_pipeline(stanza.Pipeline,lang=lang,dir=folder,processors='tokenize',use_gpu=False,logging_level='ERROR')
-                    self.assertIs(trainer.torch,original_torch)
-
-    @unittest.skipUnless(importlib.util.find_spec('stanza'),'Optional installed Stanza runtime required')
-    def test_actual_stanza_legacy_resource_initialization_both_languages_stays_offline(self):
-        import stanza
-        from stanza.pipeline import core
-        original_loader=core.load_resources_json
-        with tempfile.TemporaryDirectory() as folder:
-            path=Path(folder)/'resources.json'
-            for lang,model in [('en','ewt'),('zh','gsdsimp')]:
-                with self.subTest(lang=lang):
-                    resources={lang:{'lang_name':'Synthetic','tokenize':{model:{}},'default_processors':{'tokenize':model}}}
-                    path.write_text(json.dumps(resources),encoding='utf-8');original=path.read_bytes()
-                    # Prove the reported failure using real Stanza before the adapter.
-                    with self.assertRaisesRegex(KeyError,'packages'):
-                        stanza.Pipeline(lang=lang,dir=folder,processors='tokenize',use_gpu=False,download_method=None,logging_level='ERROR')
-                    # Only tensor loading is mocked; resource/processor resolution is real.
-                    with mock.patch.dict(core.NAME_TO_PROCESSOR_CLASS,{'tokenize':mock.Mock()}),mock.patch.object(core,'download_resources_json',side_effect=AssertionError('No resource download')),mock.patch.object(core,'download_models',side_effect=AssertionError('No model download')),mock.patch('socket.create_connection',side_effect=AssertionError('No network')):
-                        pipeline=worker.offline_stanza_pipeline(stanza.Pipeline,lang=lang,dir=folder,processors='tokenize',use_gpu=False,logging_level='ERROR')
-                    self.assertIs(pipeline.download_method,core.DownloadMethod.NONE)
-                    self.assertEqual([name for name,_ in pipeline.load_list],['tokenize'])
-                    self.assertEqual(pipeline.load_list[0][1][0].package,model)
-                    self.assertEqual(Path(pipeline.config['tokenize_model_path']),Path(folder)/lang/'tokenize'/(model+'.pt'))
-                    self.assertFalse(pipeline.config.get('tokenize_pretokenized',False))
-                    self.assertEqual(path.read_bytes(),original);self.assertIs(core.load_resources_json,original_loader)
-            with mock.patch.object(core,'load_resources_json',side_effect=FileNotFoundError('synthetic missing resource')) as failed_loader:
-                with self.assertRaises(FileNotFoundError):
-                    worker.offline_stanza_pipeline(stanza.Pipeline,lang='en',dir=folder,processors='tokenize')
-                self.assertIs(core.load_resources_json,failed_loader)
-
     def test_self_test_diagnostics_and_response_validation_fail_closed(self):
-        good=subprocess.CompletedProcess([],0,json.dumps({'pieces':['翻译']}),'')
+        good=subprocess.CompletedProcess([],0,json.dumps({'pieces':['翻译','翻译']}),'')
         failure=subprocess.CompletedProcess([],2,'','private path and synthetic-secret\nARGOS_DIAGNOSTIC exception=RuntimeError; at=stanza.example.load:42\n')
         cases=[(failure,'exception=RuntimeError'),
                (subprocess.CompletedProcess([],2,'','private path and synthetic-secret'),'No safe exception record'),
                (subprocess.CompletedProcess([],0,'not JSON',''),'Invalid worker response'),
                (subprocess.CompletedProcess([],0,json.dumps({'pieces':[]}),''),'Invalid worker response'),
-               (subprocess.CompletedProcess([],0,json.dumps({'pieces':['我们一起学习数学。']}),''),'unchanged translation'),
+               (subprocess.CompletedProcess([],0,json.dumps({'pieces':['我们一起学习数学。','我们一起学习数学。']}),''),'unchanged translation'),
                (subprocess.TimeoutExpired('private path and synthetic-secret',30),'deadline'),
                (FileNotFoundError(2,'synthetic-secret','private path'),'errno=2')]
         for failed,expected in cases:
@@ -252,26 +209,63 @@ runpy.run_path(sys.argv[1],run_name='__main__')
         base=Path(self.temp.name);python=ar.python_path();python.parent.mkdir(parents=True);python.touch()
         original=b'{"verified":false}'
         (base/'installation.json').write_bytes(original)
+        sentence_files=self.sentence_files()
         archives=base/'official-files';archives.mkdir()
         for pair in ('en_zh','zh_en'):
             source,target=pair.split('_');folder='translate-'+pair+'-1_9'
             data={folder+'/metadata.json':json.dumps({'from_code':source,'to_code':target,'package_version':'1.9'}),folder+'/model/model.bin':'synthetic'}
             (archives/(folder+'.argosmodel')).write_bytes(self.archive(data).getvalue())
-        results=[subprocess.CompletedProcess([],0,json.dumps({'pieces':['学习数学']}),''),subprocess.CompletedProcess([],2,'','ARGOS_DIAGNOSTIC exception=ValueError; at=argos_worker.run:65\n')]
+        results=[subprocess.CompletedProcess([],0,json.dumps({'pieces':['学习数学','学习数学']}),''),subprocess.CompletedProcess([],2,'','ARGOS_DIAGNOSTIC exception=ValueError; at=argos_worker.run:65\n')]
         with mock.patch.object(setup,'check_host'),mock.patch.object(setup.subprocess,'run',side_effect=results) as child,contextlib.redirect_stdout(io.StringIO()):
-            with self.assertRaisesRegex(RuntimeError,'zh_en'):setup.install(model_files=archives,skip_dependencies=True)
+            with self.assertRaisesRegex(RuntimeError,'zh_en'):setup.install(model_files=archives,skip_dependencies=True,sbd_files=sentence_files)
         self.assertEqual(child.call_count,2)
         for call in child.call_args_list:
             self.assertIn('argos_worker.py',call.args[0][-1]);self.assertNotIn('pip',call.args[0])
         self.assertEqual((base/'installation.json').read_bytes(),original)
         self.assertEqual(list((base/'packages').iterdir()),[])
         self.assertFalse((base/'.setup.lock').exists());self.assertFalse(ar.ready())
-        results[1]=subprocess.CompletedProcess([],0,json.dumps({'pieces':['We learn mathematics together.']}),'')
+        results[1]=subprocess.CompletedProcess([],0,json.dumps({'pieces':['We learn mathematics together.','We learn mathematics together.']}),'')
         with mock.patch.object(setup,'check_host'),mock.patch.object(setup.subprocess,'run',side_effect=results) as child,contextlib.redirect_stdout(io.StringIO()):
-            setup.install(model_files=archives,skip_dependencies=True)
+            setup.install(model_files=archives,skip_dependencies=True,sbd_files=sentence_files)
         self.assertEqual(child.call_count,2);self.assertTrue(ar.ready())
         receipt=json.loads((base/'installation.json').read_text(encoding='utf-8'))
         self.assertTrue(receipt['verified']);self.assertEqual(len(receipt['offline_examples']),2)
+
+    def test_windows_diagnostic_uses_existing_models_and_never_activates(self):
+        import diagnose_argos
+        base=Path(self.temp.name);sentences=self.sentence_files()
+        archives=base/'archives';archives.mkdir()
+        for pair in ('en_zh','zh_en'):
+            source,target=pair.split('_');folder='translate-'+pair+'-1_9'
+            entries={folder+'/metadata.json':json.dumps({'from_code':source,'to_code':target,'package_version':'1.9'}),folder+'/model/model.bin':'synthetic'}
+            (archives/(folder+'.argosmodel')).write_bytes(self.archive(entries).getvalue())
+        receipt=base/'installation.json';receipt.write_bytes(b'original receipt')
+        output=base/'report.json'
+        inspect=subprocess.CompletedProcess([],0,json.dumps({'versions':{},'models':[]}),'')
+        good=subprocess.CompletedProcess([],0,json.dumps({'pieces':['translated','translated']}),'')
+        bad=subprocess.CompletedProcess([],2,'','ARGOS_DIAGNOSTIC exception=ValueError; at=argos_worker.run:1\nprivate path')
+        for failure in (False,True):
+            with self.subTest(failure=failure),mock.patch.object(setup,'check_host'),mock.patch.object(setup,'download_model',side_effect=AssertionError('No downloads')),mock.patch.object(setup.subprocess,'run',side_effect=[inspect,good,bad if failure else good]) as child,mock.patch('sys.argv',['diagnose_argos.py','--model-files',str(archives),'--sbd-files',str(sentences),'--output',str(output)]),contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(diagnose_argos.main(),1 if failure else 0)
+            report=json.loads(output.read_text(encoding='utf-8'))
+            self.assertEqual(report['status'],'failed' if failure else 'passed_staged_real_models')
+            self.assertNotIn('private path',output.read_text(encoding='utf-8'))
+            self.assertEqual(receipt.read_bytes(),b'original receipt')
+            self.assertFalse((base/'packages').exists());self.assertFalse((base/'.setup.lock').exists())
+            self.assertEqual(child.call_count,3)
+            for call in child.call_args_list:self.assertNotIn('pip',call.args[0])
+
+    def test_acceptance_harness_checks_edits_and_reports_safe_failure(self):
+        import verify_argos_models
+        self.ready_files();output=Path(self.temp.name)/'acceptance.json'
+        for fail in (False,True):
+            model=ar.ArgosError('private-secret') if fail else lambda text,target:('学习 ' if target=='zh' else 'Learn ')+text
+            with mock.patch.object(ar,'translate',side_effect=model),mock.patch('sys.argv',['verify_argos_models.py','--output',str(output)]),contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(verify_argos_models.main(),1 if fail else 0)
+            report=json.loads(output.read_text(encoding='utf-8'))
+            self.assertEqual(report['status'],'failed' if fail else 'passed')
+            self.assertNotIn('private-secret',output.read_text(encoding='utf-8'))
+            if not fail:self.assertEqual(len(report['examples']),2)
 
     def test_worker_guard_denies_network_before_optional_imports(self):
         # A separate process prevents the guard from modifying this test runner's sockets.

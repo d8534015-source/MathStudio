@@ -6,6 +6,8 @@ on:
       - 'argos_*.py'
       - 'public_translations.py'
       - 'test_argos_offline.py'
+      - 'diagnose_argos.py'
+      - 'verify_argos_models.py'
       - 'packaging/argos/**'
       - '.github/workflows/argos-runtime.yml'
   workflow_dispatch:
@@ -34,7 +36,14 @@ jobs:
           python -m pip install --require-hashes --only-binary=:all: -r requirements.txt
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -m pip check
-      - name: Focused synthetic regressions; no model downloads or installer rebuild
+      - name: Fetch only official hash-pinned MiniSBD sentence models
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; import argos_setup; base=Path('.ci-models').resolve(); [argos_setup.sentence_model(base,pair) for pair in ('en_zh','zh_en')]"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Focused regressions with genuine sentence models; no translation model downloads or installer rebuild
+        env:
+          MATH_ARGOS_TEST_SBD_DIR: '${{ github.workspace }}/.ci-models/downloads/minisbd-v0.0.1'
         shell: pwsh
         run: |
           python -m unittest test_argos_offline test_public_translations -v 2>&1 | Tee-Object argos-windows-tests.txt

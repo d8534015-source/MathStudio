@@ -1,5 +1,6 @@
 """Lightweight OWNER adapter. Never imports Argos into the HTTP/teacher process."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -8,6 +9,10 @@ import threading
 from runtime_paths import state_directory
 
 ROOT = Path(__file__).resolve().parent
+try:
+    PROFILE = json.loads((ROOT/'packaging'/'argos'/'profile.json').read_text(encoding='utf-8'))
+except (OSError,ValueError):
+    PROFILE = {}  # An incomplete optional-runtime upgrade must not stop OWNER.
 TIMEOUT = 30  # Bounded CPU work; only the translation-editor request gets a longer deadline.
 _SLOT = threading.BoundedSemaphore(1)
 TOKEN = re.compile(r'(MSKEEP[A-F0-9]{24}X\d+END)')
@@ -38,13 +43,18 @@ def ready():
         if not python_path().is_file() or not receipt.is_file() or receipt.stat().st_size > 16384 or (base/'.setup.lock').exists():
             return False
         info = json.loads(receipt.read_text(encoding='utf-8'))
-        if info.get('schema') != 1 or info.get('argos') != '1.11.0' or not info.get('verified'):
+        if info.get('schema') != 2 or info.get('profile') != PROFILE['id'] or info.get('argos') != '1.11.0' or not info.get('verified'):
             return False
         for pair in ('en_zh', 'zh_en'):
             item = info['models'][pair]
             folder = base/'packages'/item['folder']
             if folder.parent != base/'packages' or not (folder/'metadata.json').is_file() or not (folder/'model'/'model.bin').is_file():
                 return False
+            spec=PROFILE['sentence_models'][pair];sentence=folder/'minisbd'/spec['filename']
+            if not sentence.is_file() or sentence.stat().st_size>32*1024**2:
+                return False
+            with sentence.open('rb') as source:
+                if hashlib.file_digest(source,'sha256').hexdigest()!=spec['sha256']:return False
         return True
     except (ArgosError, OSError, ValueError, KeyError, TypeError):
         return False
@@ -57,7 +67,7 @@ def environment(base):
     env.update(USERPROFILE=str(base), LOCALAPPDATA=str(base/'cache'), APPDATA=str(base/'config'),
                STANZA_RESOURCES_DIR=str(base/'data'/'stanza'), PYTHONUTF8='1', PYTHONIOENCODING='utf-8', ARGOS_PACKAGES_DIR=str(base/'packages'),
                XDG_DATA_HOME=str(base/'data'), XDG_CONFIG_HOME=str(base/'config'), XDG_CACHE_HOME=str(base/'cache'),
-               ARGOS_MODEL_PROVIDER='OPENNMT', ARGOS_DEVICE_TYPE='cpu', ARGOS_CHUNK_TYPE='STANZA',
+               ARGOS_MODEL_PROVIDER='OPENNMT', ARGOS_DEVICE_TYPE='cpu', ARGOS_CHUNK_TYPE='MINISBD',
                ARGOS_INTER_THREADS='1', ARGOS_INTRA_THREADS='1', ARGOS_COMPUTE_TYPE='int8',
                OMP_NUM_THREADS='1', MKL_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1',
                HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', TORCH_HOME=str(base/'cache'/'torch'), HF_HOME=str(base/'cache'/'huggingface'))

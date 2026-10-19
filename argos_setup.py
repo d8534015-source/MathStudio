@@ -36,6 +36,8 @@ def stopped_owner():
 
 
 def check_host():
+    if not argos_runtime.PROFILE.get('id'):
+        raise RuntimeError('Missing Argos runtime profile. Extract the complete updated OWNER package.')
     if sys.version_info[:2] != (3,13) or struct.calcsize('P') != 8:
         raise RuntimeError('Run with 64-bit CPython 3.13: py -3.13 argos_setup.py install')
     if sys.platform not in ('win32','linux') or platform.machine().lower() not in ('amd64','x86_64'):
@@ -102,16 +104,54 @@ def unpack_model(archive,destination,pair):
     return folder
 
 
+def sentence_model(base,pair,local=None,allow_download=True):
+    spec=argos_runtime.PROFILE['sentence_models'][pair]
+    path=Path(local)/spec['filename'] if local else base/'downloads'/'minisbd-v0.0.1'/spec['filename']
+    if not path.exists():
+        if local or not allow_download:raise RuntimeError('Required official sentence model missing: '+spec['filename'])
+        path.parent.mkdir(parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=path.parent) as temporary:
+            pending=Path(temporary)/spec['filename']
+            print('Downloading official MiniSBD model:',spec['filename'],flush=True)
+            download_model(spec['url'],pending)
+            if file_digest(pending)!=spec['sha256']:raise RuntimeError('Official sentence model checksum mismatch: '+spec['filename'])
+            pending.replace(path)
+    if path.stat().st_size>32*1024**2 or file_digest(path)!=spec['sha256']:
+        raise RuntimeError('Sentence model checksum mismatch: '+spec['filename'])
+    return path
+
+
+def prepare_models(base,packages,model_files=None,sbd_files=None,allow_download=True):
+    installed={}
+    for pair,spec in MODELS.items():
+        archive=Path(model_files)/('translate-'+pair+'-1_9.argosmodel') if model_files else packages.parent/(pair+'.argosmodel')
+        if not model_files:
+            if not allow_download:raise RuntimeError('Provide the existing official model archives.')
+            print('Downloading official free model:',pair,flush=True);download_model(spec['url'],archive)
+        folder=unpack_model(archive,packages,pair)
+        # Argos 1.11 supports a local MiniSBD model within each package. There is
+        # exactly one, so its normal loader never falls back to cached downloads.
+        sentence=sentence_model(base,pair,sbd_files,allow_download)
+        sbd=packages/folder/'minisbd';sbd.mkdir(exist_ok=True)
+        if list(sbd.iterdir()):raise RuntimeError('Unexpected sentence models in translation archive.')
+        shutil.copyfile(sentence,sbd/sentence.name)
+        installed[pair]={'folder':folder,'version':spec['version'],'url':spec['url'],'sha256':file_digest(archive),
+                         'sentence_model':dict(argos_runtime.PROFILE['sentence_models'][pair])}
+        print(pair,'SHA-256:',installed[pair]['sha256'],flush=True)
+    return installed
+
+
 def self_test(base,packages):
     # Test staged models before any active model or installation receipt changes.
     env=argos_runtime.environment(base);env['ARGOS_PACKAGES_DIR']=str(packages)
     examples=[]
     for target,text in [('zh','We learn mathematics together.'),('en','我们一起学习数学。')]:
+        texts=[text,'We solve an equation.' if target=='zh' else '我们解一个方程。']
         pair='en_zh' if target=='zh' else 'zh_en'
         prefix='Offline model self-test failed ('+pair+'). No new models were activated. '
         try:
             result=subprocess.run([str(argos_runtime.python_path()),'-I','-u',str(ROOT/'argos_worker.py')],
-                input=json.dumps({'target':target,'pieces':[text]}),encoding='utf-8',stdout=subprocess.PIPE,
+                input=json.dumps({'target':target,'pieces':texts}),encoding='utf-8',stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,timeout=argos_runtime.TIMEOUT,cwd=base,env=env)
         except subprocess.TimeoutExpired:
             raise RuntimeError(prefix+'Worker exceeded the '+str(argos_runtime.TIMEOUT)+'-second deadline.') from None
@@ -125,19 +165,19 @@ def self_test(base,packages):
             raise RuntimeError(prefix+'Worker exit='+str(result.returncode)+'. '+detail)
         try:
             values=json.loads(result.stdout)['pieces']
-            if not isinstance(values,list) or len(values)!=1 or not isinstance(values[0],str) or len(values[0])>20000:
+            if not isinstance(values,list) or len(values)!=2 or any(not isinstance(x,str) or len(x)>20000 for x in values):
                 raise ValueError()
             translated=values[0]
         except (ValueError,KeyError,TypeError):
-            raise RuntimeError(prefix+'Invalid worker response; expected one translated string.') from None
-        if not translated.strip() or translated.strip()==text:
+            raise RuntimeError(prefix+'Invalid worker response; expected two translated strings.') from None
+        if any(not value.strip() or value.strip()==source for source,value in zip(texts,values)):
             raise RuntimeError(prefix+'Validation rejected empty or unchanged translation.')
-        examples.append({'target':target,'source':text,'translation':translated})
+        examples.append({'target':target,'source':text,'translation':translated,'repeated_source':texts[1],'repeated_translation':values[1]})
         print(text,'->',translated,flush=True)
     return examples
 
 
-def install(model_files=None,wheelhouse=None,skip_dependencies=False):
+def install(model_files=None,wheelhouse=None,skip_dependencies=False,sbd_files=None):
     check_host()
     with maintenance() as base:
         runtime=base/'runtime'
@@ -152,17 +192,9 @@ def install(model_files=None,wheelhouse=None,skip_dependencies=False):
             subprocess.run(command,check=True)
             subprocess.run([str(argos_runtime.python_path()),'-m','pip','check'],check=True)
         (base/'packages').mkdir(exist_ok=True)
-        installed={}
         with tempfile.TemporaryDirectory(prefix='setup-',dir=base) as scratch:
             scratch=Path(scratch);packages=scratch/'packages';packages.mkdir()
-            for pair,spec in MODELS.items():
-                archive=Path(model_files)/('translate-'+pair+'-1_9.argosmodel') if model_files else scratch/(pair+'.argosmodel')
-                if not model_files:
-                    print('Downloading official free model:',pair,flush=True);download_model(spec['url'],archive)
-                sha=file_digest(archive)
-                folder=unpack_model(archive,packages,pair)
-                installed[pair]={'folder':folder,'version':spec['version'],'url':spec['url'],'sha256':sha}
-                print(pair,'SHA-256:',sha,flush=True)
+            installed=prepare_models(base,packages,model_files,sbd_files)
             # Validate actual models with all network operations disabled before publication.
             examples=self_test(base,packages)
             replaced=[]
@@ -173,7 +205,7 @@ def install(model_files=None,wheelhouse=None,skip_dependencies=False):
                     if target.exists():target.rename(backup)
                     replaced.append((target,backup))
                     (packages/item['folder']).rename(target)
-                receipt={'schema':1,'argos':'1.11.0','python':sys.version.split()[0],'verified':True,
+                receipt={'schema':2,'profile':argos_runtime.PROFILE['id'],'argos':'1.11.0','python':sys.version.split()[0],'verified':True,
                          'dependencies_sha256':file_digest(lock),'models':installed,'offline_examples':examples}
                 pending=base/'installation.pending.json'
                 pending.write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
@@ -197,10 +229,11 @@ def main():
     parser.add_argument('--model-files',type=Path,help='Directory containing the two official .argosmodel files for disconnected setup.')
     parser.add_argument('--wheelhouse',type=Path,help='Pre-downloaded hash-locked wheels for disconnected setup.')
     parser.add_argument('--skip-dependencies',action='store_true',help='Reuse an existing Argos runtime without running pip; model verification is still required.')
+    parser.add_argument('--sbd-files',type=Path,help='Existing official en.onnx and zh-hans.onnx files for fully disconnected setup.')
     args=parser.parse_args()
     if args.action=='status':
         print(json.dumps({'home':str(argos_runtime.home()),'ready':argos_runtime.ready()},indent=2));return
-    try:install(args.model_files,args.wheelhouse,args.skip_dependencies)
+    try:install(args.model_files,args.wheelhouse,args.skip_dependencies,args.sbd_files)
     except (OSError,RuntimeError,ValueError,KeyError,argos_runtime.ArgosError,subprocess.SubprocessError,zipfile.BadZipFile) as ex:
         print('Offline translation setup failed:',str(ex),file=sys.stderr);sys.exit(1)
 

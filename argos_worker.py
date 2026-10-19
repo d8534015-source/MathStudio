@@ -37,70 +37,89 @@ def safe_diagnostic(error):
     return '; '.join(details)[:1500]
 
 
-def compatible_stanza_resources(resources):
-    # Older bundled tokenizers name defaults directly; Stanza 1.10 expects packages.
-    # Adapt only that known schema, without changing models or inventing defaults.
-    result=resources.copy()
-    for lang,info in resources.items():
-        if isinstance(info,dict) and 'packages' not in info and isinstance(info.get('default_processors'),dict):
-            result[lang]={**info,'packages':{'default':dict(info['default_processors'])}}
-    return result
+def profile():
+    from pathlib import Path
+    return json.loads((Path(__file__).resolve().parent/'packaging'/'argos'/'profile.json').read_text(encoding='utf-8'))
 
 
-def compatible_tokenizer_checkpoint(checkpoint):
-    # Legacy Stanza saved exactly model/vocab/config, before feature dropout and
-    # lexicons existed. Preserve all weights and dimensions for strict loading.
-    if not isinstance(checkpoint,dict) or set(checkpoint)!={'model','vocab','config'}:
-        return checkpoint
-    config=checkpoint['config']
-    if not isinstance(config,dict) or 'feat_dropout' in config or not {'vocab_size','emb_dim','hidden_dim','dropout'}<=config.keys():
-        return checkpoint
-    return {**checkpoint,'config':{**config,'feat_dropout':0.0},'lexicon':None}
-
-
-def offline_stanza_pipeline(pipeline,*args,**kwargs):
-    from stanza.pipeline import core
-    from stanza.models.tokenization import trainer
-    loader=core.load_resources_json
-    original_torch=trainer.torch
-    def load_compatible(*load_args,**load_kwargs):
-        return compatible_stanza_resources(loader(*load_args,**load_kwargs))
-    class TokenizerTorch:
-        def load(self,*load_args,**load_kwargs):
-            # Keep Stanza's weights_only=True and normal strict load_state_dict.
-            return compatible_tokenizer_checkpoint(original_torch.load(*load_args,**load_kwargs))
-        def __getattr__(self,name):
-            return getattr(original_torch,name)
-    kwargs['download_method']=None
-    # This patch is confined to the single inference child and this initialization.
-    core.load_resources_json=load_compatible
-    trainer.torch=TokenizerTorch()
-    try:
-        return pipeline(*args,**kwargs)
-    finally:
-        core.load_resources_json=loader
-        trainer.torch=original_torch
-
-
-def run(payload):
-    # Set before optional imports. Missing resources must fail, never fetch anything.
+def offline_environment():
+    # Deny Python network I/O before importing optional libraries. ONNX's native
+    # telemetry is disabled separately, before creating any inference session.
     socket.socket.connect = deny_network
     socket.socket.connect_ex = deny_network
+    socket.socket.sendto = deny_network
     socket.create_connection = deny_network
     socket.getaddrinfo = deny_network
     if os.name != 'nt':
         try: os.nice(10)
         except OSError: pass
-    import stanza
-    original_pipeline = stanza.Pipeline
-    def offline_pipeline(*args, **kwargs):
-        return offline_stanza_pipeline(original_pipeline,*args,**kwargs)
-    stanza.Pipeline = offline_pipeline
-    from argostranslate import translate
-    from opencc import OpenCC
-    target = payload['target']
-    if target not in ('en','zh') or not isinstance(payload['pieces'],list) or sum(len(x) for x in payload['pieces']) > 20000:
+
+
+def inspect_models(packages,versions):
+    # Public model metadata only. Never include filesystem paths or model text.
+    from pathlib import Path
+    result=[]
+    known_features={'space_before','capitalized','all_caps','numeric','start_of_para','end_of_para'}
+    for pkg in packages:
+        item={'from':pkg.from_code,'to':pkg.to_code,'version':str(pkg.package_version)}
+        resources=pkg.package_path/'stanza'/'resources.json'
+        if resources.is_file() and resources.stat().st_size<2*1024**2:
+            data=json.loads(resources.read_text(encoding='utf-8'))
+            lang=data.get(pkg.from_code,{})
+            item['legacy_resources']={'packages': 'packages' in lang,'default_processors':'default_processors' in lang}
+        checkpoints=list((pkg.package_path/'stanza').glob('*/tokenize/*.pt'))
+        if len(checkpoints)==1:
+            try:
+                import torch
+                checkpoint=torch.load(checkpoints[0],map_location='cpu',weights_only=True)
+                config=checkpoint['config']
+                item['legacy_checkpoint']={'feat_dropout':'feat_dropout' in config,'lexicon':'lexicon' in checkpoint,
+                    'features':[x if x in known_features else 'unknown' for x in config.get('feat_funcs',[])[:20]]}
+            except Exception as error:
+                item['legacy_checkpoint']={'diagnostic':safe_diagnostic(error)}
+        result.append(item)
+    return {'python':sys.version.split()[0],'profile':profile()['id'],'versions':versions,'models':result}
+
+
+def initialize(inspect=False):
+    from importlib.metadata import version
+    import hashlib
+    expected=profile()
+    versions={name:version(name) for name in expected['versions']}
+    import onnxruntime
+    onnxruntime.disable_telemetry_events()
+    from argostranslate import package,settings,translate
+    packages=[p for p in package.get_installed_packages() if (p.from_code,p.to_code) in [('en','zh'),('zh','en')]]
+    if inspect:
+        report=inspect_models(packages,versions)
+        report['compatible_runtime']=versions==expected['versions']
+        report['configuration']={'device':settings.device,'chunk_type':settings.chunk_type.name,'provider':settings.model_provider.name}
+        return translate,report
+    if versions!=expected['versions']:raise ValueError('Runtime versions do not match profile')
+    if settings.device!='cpu' or settings.model_provider!=settings.ModelProvider.OPENNMT or settings.chunk_type!=settings.ChunkType.MINISBD:
+        raise ValueError('Offline CPU MiniSBD configuration required')
+    for pair,spec in expected['sentence_models'].items():
+        source,target=pair.split('_')
+        matches=[p for p in packages if p.from_code==source and p.to_code==target and str(p.package_version)=='1.9']
+        if len(matches)!=1:raise ValueError('Model unavailable')
+        folder=matches[0].package_path/'minisbd'
+        files=list(folder.glob('*.onnx'));model=folder/spec['filename']
+        if files!=[model] or not model.is_file() or model.stat().st_size>32*1024**2:
+            raise ValueError('Sentence model unavailable')
+        with model.open('rb') as stream:
+            if hashlib.file_digest(stream,'sha256').hexdigest()!=spec['sha256']:
+                raise ValueError('Sentence model checksum mismatch')
+    return translate,None
+
+
+def run(payload):
+    offline_environment()
+    if payload.get('operation')=='inspect':return initialize(inspect=True)[1]
+    target=payload.get('target');pieces=payload.get('pieces')
+    if target not in ('en','zh') or not isinstance(pieces,list) or any(not isinstance(x,str) for x in pieces) or sum(map(len,pieces))>20000:
         raise ValueError('Invalid request')
+    translate,_=initialize()
+    from opencc import OpenCC
     source = 'en' if target == 'zh' else 'zh'
     languages = {language.code:language for language in translate.get_installed_languages()}
     if source not in languages or target not in languages:
