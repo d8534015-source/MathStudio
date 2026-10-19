@@ -27,6 +27,7 @@ from urllib.parse import urlencode, quote
 from urllib.request import Request, urlopen
 import uuid
 import webbrowser
+from annotation_pipeline import BoardQueue
 
 if sys.platform != "win32":
     raise SystemExit("MathStudio Teacher Meeting App currently supports Windows only.")
@@ -52,6 +53,10 @@ user32 = ctypes.windll.user32
 # ctypes may treat HWND values as 32-bit integers and target the wrong window.
 user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
 user32.GetAncestor.restype = wintypes.HWND
+user32.GetCapture.argtypes=[]
+user32.GetCapture.restype=wintypes.HWND
+user32.ReleaseCapture.argtypes=[]
+user32.ReleaseCapture.restype=wintypes.BOOL
 user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.GetWindowLongW.restype = wintypes.LONG
 user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
@@ -171,6 +176,9 @@ class TeacherMeetingApp:
         self.people_var = self._LocalizedVar(self.root, self, "Students: loading…")
         self.mode_var = self._LocalizedVar(self.root, self, "Interact")
         self.student_var = self._LocalizedVar(self.root, self, "Students: view only")
+        self.ui_queue=queue.Queue(maxsize=64)
+        self.ui_stopped=threading.Event()
+        self.root.after(16,self.drain_ui)
         self.build_toolbar()
         self.apply_toolbar_language()
         self.connect()
@@ -258,6 +266,8 @@ class TeacherMeetingApp:
         self.share_btn.pack(side="left", padx=3)
         self.media_btn = self.make_button(right, "Video panel", self.open_media, bg="#31505f")
         self.media_btn.pack(side="left", padx=3)
+        self.record_btn = self.make_button(right, "Recording", self.recording_controls, bg="#25445a")
+        self.record_btn.pack(side="left", padx=3)
         self.end_btn = self.make_button(right, "End class", self.end_class, bg=self.DANGER)
         self.end_btn.pack(side="left", padx=4)
         self.close_btn = self.make_button(right, "Close app", self.on_close)
@@ -505,18 +515,33 @@ class TeacherMeetingApp:
         if not self.overlay:
             return
         self.draw_mode = not bool(enabled)
-        self.apply_overlay_transparency()
+        # Ink is permanently click-through. Reapplying HWND styles here flushes
+        # Tk idle work while an input transition/capture can still be active.
         self._show_input_capture(self.draw_mode)
         if self.canvas:
             self.canvas.configure(cursor="arrow")
 
     def set_mode(self, draw: bool):
-        self.draw_mode = bool(draw)
+        draw=bool(draw)
+        if not draw:
+            self.pointer_up(None)
+            self.release_pointer()
+        self.draw_mode = draw
         self.set_clickthrough(not self.draw_mode)
         self.refresh_button_states()
         self.status_var.set("Draw mode · drag anywhere on the desktop to annotate" if self.draw_mode
                             else "Interact mode · annotations stay visible while clicks pass through to your apps")
         self.toolbar.lift()
+
+    def release_pointer(self):
+        if self.input_canvas and self.input_canvas.grab_current() is self.input_canvas:
+            self.input_canvas.grab_release()
+        # Tk's implicit Windows mouse capture is distinct from a Tk grab.
+        if self.input_overlay:
+            captured=user32.GetCapture()
+            window=self.input_overlay.winfo_id()
+            if captured and int(user32.GetAncestor(captured,GA_ROOT) or captured)==int(user32.GetAncestor(window,GA_ROOT) or window):
+                user32.ReleaseCapture()
 
     def toggle_mode(self):
         self.set_mode(not self.draw_mode)
@@ -549,8 +574,10 @@ class TeacherMeetingApp:
         return {"id": str(uuid.uuid4()), "type": kind, "color": self.color, "width": self.width}
 
     def pointer_down(self, event):
-        if not self.draw_mode or self.saving:
+        if not self.draw_mode:
             return
+        if self.draft is not None:
+            self.status_var.set('Finish or sync the pending stroke before continuing.');return
         x, y = self.normalized(event)
         if self.tool == "eraser":
             self.erase_at(x, y)
@@ -567,23 +594,32 @@ class TeacherMeetingApp:
         self.redraw()
 
     def pointer_move(self, event):
-        if not self.draft:
+        if not self.draw_mode or not self.draft:
             return
         x, y = self.normalized(event)
         if self.draft["type"] == "pen":
             pts = self.draft["points"]
-            if len(pts) < 1500:
-                if not pts or math.hypot(x - pts[-1][0], y - pts[-1][1]) > 0.001:
-                    pts.append([x, y])
+            if pts and [x,y]==pts[-1]:return
+            if len(pts)>=1500:
+                previous=pts[-1]
+                if not self.commit_shape(self.draft):return
+                self.draft={**self.new_shape('pen'),'points':[previous]};pts=self.draft['points']
+            previous=pts[-1];pts.append([x,y])
+            w,h=max(1,self.canvas.winfo_width()),max(1,self.canvas.winfo_height())
+            self.canvas.create_line(previous[0]*w,previous[1]*h,x*w,y*h,
+                                    fill=self.draft['color'],width=max(1,int(self.draft['width'])*2),capstyle='round',joinstyle='round')
+            return
         else:
             self.draft["x2"], self.draft["y2"] = x, y
         self.redraw()
 
     def pointer_up(self, _event):
+        if _event is not None and self.draft:self.pointer_move(_event)
+        self.release_pointer()
         if not self.draft:
             return
-        shape, self.draft = self.draft, None
-        self.commit_shape(shape)
+        shape=self.draft
+        if self.commit_shape(shape):self.draft=None;self.redraw()
 
     @staticmethod
     def point_segment_distance(px, py, x1, y1, x2, y2):
@@ -688,71 +724,51 @@ class TeacherMeetingApp:
                     self.draw_shape(self.draft)
                 except Exception:
                     pass
-        self.toolbar.lift()
-
     # ---------- Sync ----------
-    def save_board(self, next_board, own_id=None, clear=False):
-        if self.saving or not self.connected:
-            return
-        self.saving = True
-        version = self.version
-        # Rebase removals by ID; never replace concurrent participants' shapes.
-        retained = {s.get("id") for s in next_board.get("shapes", [])}
-        removed = {s.get("id") for s in self.board.get("shapes", [])} - retained
-        self.status_var.set("Saving annotation…")
+    def post_ui(self,callback,*args):
+        while not self.ui_stopped.is_set():
+            try:self.ui_queue.put((callback,args),timeout=.05);return
+            except queue.Full:continue
 
-        def work():
-            nonlocal version, next_board
-            try:
-                for attempt in range(3):
-                    try:
-                        response = http_json(self.server + "/api/teacher-app/board", "POST",
-                                             {"token": self.token, "version": version, "board": next_board})
-                        return ("ok", response, next_board)
-                    except RuntimeError as ex:
-                        if attempt < 2 and "changed" in str(ex).lower():
-                            state = http_json(self.state_url())
-                            version = int(state.get("version") or 0)
-                            current = state.get("board") or {"background": "blank", "shapes": []}
-                            if own_id:
-                                own = next((x for x in next_board.get("shapes", []) if x.get("id") == own_id), None)
-                                if own and not any(x.get("id") == own_id for x in current.get("shapes", [])):
-                                    next_board = {**current, "shapes": [*(current.get("shapes") or []), own]}
-                                else:
-                                    next_board = current
-                            else:
-                                next_board = {**current, "shapes": [] if clear else [
-                                    s for s in current.get("shapes", []) if s.get("id") not in removed]}
-                            continue
-                        raise
-            except Exception as ex:
-                return ("err", ex, None)
+    def drain_ui(self):
+        if self.closed:return
+        for _ in range(16):
+            try:callback,args=self.ui_queue.get_nowait()
+            except queue.Empty:break
+            callback(*args)
+        sync=getattr(self,'board_sync',None)
+        if sync:
+            changed=sync.drain()
+            self.saving=sync.busy
+            if changed:
+                self.version=sync.version;self.board=sync.projected()
+                present={shape['id'] for shape in sync.board['shapes']}|{s['id'] for op in sync.pending for s in op['add']}
+                self.my_shapes=[sid for sid in self.my_shapes if sid in present]
+                self.status_var.set('Could not sync annotation: '+sync.error if sync.error else 'Annotation synced · student drawings appear here automatically')
+                self.redraw()
+            if self.connected:sync.start()
+        self.root.after(16,self.drain_ui)
 
-        def done(result):
-            self.saving = False
-            if self.closed:
-                return
-            if result[0] == "ok":
-                self.version = int(result[1].get("version") or self.version)
-                self.board = result[2]
-                present = {s.get("id") for s in self.board.get("shapes", [])}
-                self.my_shapes = [sid for sid in self.my_shapes if sid in present]
-                if own_id and own_id in present and own_id not in self.my_shapes:
-                    self.my_shapes.append(own_id)
-                self.status_var.set("Annotation synced · student drawings appear here automatically")
-            else:
-                self.status_var.set("Could not sync annotation: " + str(result[1]))
-            self.redraw()
-
-        threading.Thread(target=lambda: self.root.after(0, done, work()), daemon=True).start()
+    def save_board(self,next_board,own_id=None,clear=False):
+        if not hasattr(self,'board_sync'):
+            server,token,url=self.server,self.token,self.state_url()
+            self.board_sync=BoardQueue(self.board,self.version,
+                lambda version,board:http_json(server+'/api/teacher-app/board','POST',{'token':token,'version':version,'board':board}),
+                lambda:http_json(url))
+        try:self.board_sync.enqueue(self.board,next_board,clear=clear)
+        except RuntimeError as error:self.status_var.set(str(error));return False
+        self.board=self.board_sync.projected()
+        if own_id:self.my_shapes.append(own_id)
+        self.status_var.set('Saving annotation…' if self.connected else 'Offline · annotation retained locally')
+        self.redraw()
+        if self.connected:self.board_sync.start()
+        return True
 
     def commit_shape(self, shape):
         next_board = {**self.board, "shapes": [*(self.board.get("shapes") or []), shape]}
-        self.save_board(next_board, shape.get("id"))
+        return self.save_board(next_board, shape.get("id"))
 
     def undo(self):
-        if self.saving:
-            return
         ids = set(self.my_shapes)
         target = next((s for s in reversed(self.board.get("shapes", [])) if s.get("id") in ids), None)
         if not target:
@@ -761,8 +777,6 @@ class TeacherMeetingApp:
         self.save_board({**self.board, "shapes": [s for s in self.board.get("shapes", []) if s.get("id") != target.get("id")]})
 
     def clear_all(self):
-        if self.saving:
-            return
         if messagebox.askyesno(APP_NAME, self.tr('Clear every shared annotation for everyone?'), parent=self.toolbar):
             self.save_board({**self.board, "shapes": []}, clear=True)
 
@@ -786,7 +800,7 @@ class TeacherMeetingApp:
                 self.status_var.set(str(result[1]))
             self.refresh_button_states()
 
-        threading.Thread(target=lambda: self.root.after(0, done, work()), daemon=True).start()
+        threading.Thread(target=lambda: self.post_ui(done, work()), daemon=True).start()
 
     def schedule_poll(self):
         if self.closed or self.polling:
@@ -815,7 +829,11 @@ class TeacherMeetingApp:
                 self.attendees = state.get("attendees") or []
                 self.connected_people = state.get("connected") or []
                 remote_version = int(state.get("version") or 0)
-                if remote_version != self.version and not self.saving and self.draft is None:
+                if hasattr(self,'board_sync'):
+                    self.board_sync.observe(state.get('board') or {'background':'blank','shapes':[]},remote_version)
+                    if self.draft is None:
+                        self.board=self.board_sync.projected();self.version=self.board_sync.version;self.redraw()
+                elif remote_version != self.version and self.draft is None:
                     self.version = remote_version
                     self.board = state.get("board") or {"background": "blank", "shapes": []}
                     self.redraw()
@@ -825,7 +843,7 @@ class TeacherMeetingApp:
                 self.status_var.set("Sync reconnecting… " + str(result[1]))
             self.root.after(POLL_MS, self.schedule_poll)
 
-        threading.Thread(target=lambda: self.root.after(0, done, work()), daemon=True).start()
+        threading.Thread(target=lambda: self.post_ui(done, work()), daemon=True).start()
 
     # ---------- Meeting controls ----------
     def classroom_url(self):
@@ -870,6 +888,13 @@ class TeacherMeetingApp:
     def open_media(self):
         self.launch_media_helper()
 
+    def recording_controls(self):
+        panel=tk.Toplevel(self.toolbar);panel.title(self.tr('Recording'));panel.transient(self.toolbar)
+        tk.Label(panel,text=self.tr('Start recording in the Video panel after consent.'),wraplength=360,padx=16,pady=12).pack()
+        for label,command in [('Recording notice','record-request'),('Pause/resume','record-pause'),('Stop recording','record-stop')]:
+            self.make_button(panel,label,lambda c=command:self.send_media_command(c)).pack(fill='x',padx=12,pady=4)
+        self.make_button(panel,'Video panel',self.open_media).pack(fill='x',padx=12,pady=8)
+
     def send_media_command(self, command: str):
         if self.media_command_busy or not self.connected:
             return
@@ -885,7 +910,7 @@ class TeacherMeetingApp:
                 self.status_var.set("Media command sent · allow browser permission if prompted in the video panel")
             else:
                 self.status_var.set("Media control failed: "+str(result[1]))
-        threading.Thread(target=lambda:self.root.after(0,done,work()),daemon=True).start()
+        threading.Thread(target=lambda:self.post_ui(done,work()),daemon=True).start()
 
     def toggle_native_screen_share(self):
         if self.screen_sharing:
@@ -922,7 +947,7 @@ class TeacherMeetingApp:
                 except Exception as ex:
                     failures+=1
                     if failures>=5:
-                        self.root.after(0,lambda e=str(ex):self.status_var.set("Screen share reconnecting… "+e))
+                        self.post_ui(self.status_var.set,"Screen share reconnecting… "+str(ex))
                 self.screen_stop.wait(0.18)
         threading.Thread(target=capture_loop,daemon=True).start()
 
@@ -981,6 +1006,8 @@ class TeacherMeetingApp:
         self.close(force=True)
 
     def on_close(self):
+        if getattr(self,'board_sync',None) and self.board_sync.pending:
+            if not messagebox.askyesno(APP_NAME,self.tr('Annotations are not synced. Close and discard pending ink?'),parent=self.toolbar):return
         if self.connected:
             choice = messagebox.askyesno(APP_NAME, self.tr('Exit this meeting?\n\nClosing the Teacher Meeting window will end the classroom for students and remove it from the active class list.'), parent=self.toolbar)
             if not choice:
@@ -994,6 +1021,8 @@ class TeacherMeetingApp:
 
     def close(self, force=False):
         self.closed = True
+        self.ui_stopped.set()
+        self.release_pointer()
         self.connected = False
         self.screen_stop.set()
         if self.screen_sharing:

@@ -1,3 +1,7 @@
+# Classroom recording / pen review
+
+Read `CLASSROOM_REVIEW.md` first for the new isolated installer, private-cloud recording configuration and manual acceptance gates. Earlier PR9 review installations remain separate.
+
 # PR #9 Windows OWNER server review
 
 This is complete OWNER source for PR #9's paired-login review, including PR #8's Argos/MiniSBD,
@@ -8,7 +12,7 @@ databases, credentials, Python environments or language models are bundled.
 ## Extract and set up without changing the working OWNER
 
 1. Keep your existing OWNER folder unchanged. Extract the entire ZIP into a
-   **new** folder, for example `C:\MathStudioTests\PR9`. Keep its single
+   **new** folder, for example `C:\MathStudioTests\Classroom`. Keep its single
    `MathStudio_v41_6_6_OWNER_Website_Management_Review` subfolder intact.
 2. On the **same Windows PC** where Argos already works, confirm
    `py -3.13 --version` works. Keep the original 64-bit Python 3.13 installation:
@@ -20,7 +24,7 @@ databases, credentials, Python environments or language models are bundled.
    actual custom `MATH_ARGOS_HOME` location if different. Do not select the
    downloaded archive folder or an individual `.argosmodel` file.
 4. Setup copies only the installed runtime, installed packages and readiness
-   receipt into `%LOCALAPPDATA%\MathStudioOwnerPR9Review\translation`.
+   receipt into `%LOCALAPPDATA%\MathStudioOwnerClassroomReview\translation`.
    Allow several GB of free disk space. No original files are changed, no
    archives are needed, and **no language models are downloaded**.
 5. Setup creates a separate OWNER Python environment and installs only the
@@ -36,8 +40,8 @@ databases, credentials, Python environments or language models are bundled.
 7. Double-click **REVIEW OWNER START.bat**. OWNER opens a local pairing
    window if it has never been initialized, and prints a temporary
    **https://...trycloudflare.com** address. It never requests a teacher
-   password in the console. Port 5059 remains loopback; the existing OWNER
-   on 5051 is neither reused nor stopped. If 5059 is busy, startup refuses it.
+   password in the console. Port 5061 remains loopback; the existing OWNER
+   on 5051 is neither reused nor stopped. If 5061 is busy, startup refuses it.
    A failed tunnel startup never calls backend initialization. Ctrl+C stops
    only this review OWNER and its own tunnel/pairing window.
 8. Install the matching **MathStudio Review** teacher installer into its
@@ -85,8 +89,8 @@ setup refuses to overwrite existing directories. Pass the same `--state` to
 both setup and start. Never select your existing OWNER state or Argos home.
 
 ```powershell
-py -3.13 .\owner_review.py setup --state "$env:LOCALAPPDATA\MathStudioOwnerPR9Review2" --argos-home "D:\ExistingArgosHome"
-py -3.13 .\owner_review.py start --state "$env:LOCALAPPDATA\MathStudioOwnerPR9Review2"
+py -3.13 .\owner_review.py setup --state "$env:LOCALAPPDATA\MathStudioOwnerClassroomReview2" --argos-home "D:\ExistingArgosHome"
+py -3.13 .\owner_review.py start --state "$env:LOCALAPPDATA\MathStudioOwnerClassroomReview2"
 ```
 
 If copying/verification fails, leave the working OWNER untouched. A copied
@@ -107,7 +111,7 @@ review installation; it does not uninstall Python or alter the working OWNER.
 The delivery checksum file covers the ZIP itself. In PowerShell:
 
 ```powershell
-Get-FileHash .\MathStudio_v41_6_6_OWNER_PR9_Review.zip -Algorithm SHA256
+Get-FileHash .\MathStudio_v41_6_6_OWNER_Classroom_Review.zip -Algorithm SHA256
 ```
 
 The matching delivery report records final local and Windows CI results.

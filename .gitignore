@@ -20,3 +20,10 @@ staging/
 
 work/
 packaging/windows/generated/
+
+# Recording media, spool and consent policy never belong in source control.
+recordings/
+*.webm
+*.mp4
+*.part
+recording-policy.json

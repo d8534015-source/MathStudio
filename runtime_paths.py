@@ -10,7 +10,7 @@ def state_directory():
     if getattr(sys,'frozen',False):
         try:
             marker=json.loads(Path(__file__).with_name('teacher_package_role.json').read_text(encoding='utf-8'))
-            if marker.get('review') is True:return base/'MathStudioReview'
+            if marker.get('review') is True:return base/('MathStudioClassroomReview' if marker.get('review_profile')=='MathStudioClassroomReview' else 'MathStudioReview')
         except (OSError,ValueError):pass
     return base/'MathStudio'
 

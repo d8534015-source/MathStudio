@@ -1,3 +1,4 @@
+import {MeetingRecorder} from './classroom_recorder.js';
 import {htmlText,uiText} from './web_i18n.js';
 // Math Studio classroom v22: peer-to-peer WebRTC camera/microphone/screen sharing
 // plus an optional shared annotation/whiteboard layer.
@@ -39,6 +40,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,
         <button id="leave" class="danger" data-i18n="ui.leave">Leave</button>
         ${admin?"<button id=\"end\" class=\"secondary\" data-i18n=\"ui.end_class_for_everyone\">End class for everyone</button>":''}
       </div>
+      <section id="recordingNotice" class="notice" aria-live="polite"></section>
       <div class="meeting-layout">
         <div class="meeting-main">
           <section id="shareStage" class="share-stage hidden" aria-label="Shared screen or whiteboard" data-i18n-aria-label="ui.shared_screen_or_whiteboard">
@@ -589,13 +591,29 @@ export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,
   }
   function pcConnected(pc){return !!pc&&(pc.connectionState==='connected'||['connected','completed'].includes(pc.iceConnectionState));}
 
+  const recorder=new MeetingRecorder({host:$('#recordingNotice'),admin,post,api,notice:note,snapshot:()=>{
+    const cameras=[{id:peer,element:$('#local'),enabled:!!cameraTrack?.enabled}];
+    const audio=[{id:peer,track:audioTrack,enabled:!!audioTrack?.enabled&&!forcedMute}];
+    for(const person of people){
+      const p=peers.get(person.id);if(!p)continue;
+      cameras.push({id:person.id,element:p.element.querySelector('video'),enabled:!!person.camera_on});
+      for(const track of p.element.querySelector('audio')?.srcObject?.getAudioTracks()||[])audio.push({id:person.id,track,enabled:!!person.mic_on&&!person.forced_mute});
+    }
+    let screen=null;
+    if(nativeShare.active){const host=people.find(p=>p.role==='admin');if(host)screen={id:host.id,element:$('#nativePresentation')};}
+    else if(presenter)screen={id:presenter,element:$('#presentation')};
+    return {cameras:cameras.filter(x=>x.element),audio,screen,board:canvas};
+  }});
   async function pollOnce(){
-    const r=await api(`/api/room/poll?class=${cid}&peer=${peer}&since=${seq}&command_since=${teacherCommandSeq}`);people=r.peers;drawingAllowed=admin||r.drawing;if($('#allow'))$('#allow').checked=r.drawing;
+    const r=await api(`/api/room/poll?class=${cid}&peer=${peer}&since=${seq}&command_since=${teacherCommandSeq}`);people=r.peers;recorder.update(r.recording||{phase:'off'});drawingAllowed=admin||r.drawing;if($('#allow'))$('#allow').checked=r.drawing;
     if(r.nativeShare){const changed=!!r.nativeShare.active!==!!nativeShare.active||Number(r.nativeShare.seq||0)!==Number(nativeShare.seq||0);nativeShare=r.nativeShare;if(changed)updateStage();}
     if(admin&&Array.isArray(r.teacherCommands)){
       for(const cmd of r.teacherCommands){
         if(cmd.command==='mic-toggle')$('#mic')?.click();
         else if(cmd.command==='camera-toggle')$('#camera')?.click();
+        else if(cmd.command==='record-request')recorder.focus();
+        else if(cmd.command==='record-pause'||cmd.command==='record-resume')await recorder.pause();
+        else if(cmd.command==='record-stop')await recorder.stop(true);
       }
       teacherCommandSeq=Math.max(teacherCommandSeq,Number(r.teacherCommandSeq||0));
     }
@@ -632,13 +650,13 @@ export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,
     }catch(ex){uiText($('#joinerror'),ex.message);}finally{$('#join').disabled=false;}
   }
   async function leave(){
-    if(stopping)return;stopping=true;clearTimeout(timer);clearTimeout(mediaHealthTimer);clearTimeout(nativePumpTimer);nativePumpTimer=null;closeFloatingAnnotator();const wasJoined=joined;joined=false;
+    if(stopping)return;stopping=true;await recorder.stop(true);clearTimeout(timer);clearTimeout(mediaHealthTimer);clearTimeout(nativePumpTimer);nativePumpTimer=null;closeFloatingAnnotator();const wasJoined=joined;joined=false;
     for(const t of [audioTrack,cameraTrack,screenTrack])if(t){t.onended=null;t.stop();}if(cameraStream)cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null;audioTrack=cameraTrack=screenTrack=null;screenStream=null;$('#local').srcObject=null;
     for(const p of peers.values()){clearTimeout(p.restartTimer);p.pc.close();p.element.remove();}peers.clear();if(wasJoined){try{await post('leave');}catch{}}
     peer=null;presenter=null;nativeShare={active:false,seq:0,at:0};nativeFrameSeq=-1;forcedMute=false;people=[];chatSeq=0;teacherCommandSeq=0;chatMessages=[];relayConfigured=false;$('#desktopAnnotatorPanel')?.classList.add('hidden');renderChat();updateMediaLinkStatus();$('#presentation').srcObject=null;$('#room').classList.add('hidden');$('#prejoin').classList.remove('hidden');viewMode='call';stopping=false;
   }
   $('#join').onclick=join;$('#leave').onclick=leave;
-  window.addEventListener('pagehide',()=>{closeFloatingAnnotator();joined=false;clearTimeout(timer);clearTimeout(mediaHealthTimer);clearTimeout(nativePumpTimer);[audioTrack,cameraTrack,screenTrack].forEach(t=>t?.stop());cameraStream?.getTracks().forEach(t=>t.stop());peers.forEach(p=>p.pc.close());});
+  window.addEventListener('pagehide',()=>{recorder.stop(false);closeFloatingAnnotator();joined=false;clearTimeout(timer);clearTimeout(mediaHealthTimer);clearTimeout(nativePumpTimer);[audioTrack,cameraTrack,screenTrack].forEach(t=>t?.stop());cameraStream?.getTracks().forEach(t=>t.stop());peers.forEach(p=>p.pc.close());});
   window.addEventListener('mathstudio-language',()=>{localStatus();renderPeople();updateMediaLinkStatus();renderAnnotator();if(annotatorWindow&&!annotatorWindow.closed)localize(annotatorWindow.document.body);renderMediaPreflight().catch(()=>{});});
   localStatus();render();updateStage();
   const roomParams=new URLSearchParams(location.search);
