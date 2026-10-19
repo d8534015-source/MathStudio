@@ -21,6 +21,7 @@ def main():
         # Exercises bundled Tcl/Tk, native Win32 imports, timezone and dependency metadata.
         import ctypes
         import teacher_meeting_app
+        import teacher_website
         from teacher_connection import teacher_only
         from build_info import BUILD_ID
         from studio_time import studio_zone
@@ -29,7 +30,7 @@ def main():
         from runtime_paths import state_directory
         path=state_directory()/'installer-self-test.json';path.parent.mkdir(parents=True,exist_ok=True)
         path.write_text(json.dumps({'build':BUILD_ID,'runtime':sys.version,'frozen':bool(getattr(sys,'frozen',False)),
-            'console':False,'timezone':str(studio_zone('Asia/Shanghai'))}),encoding='utf-8')
+            'console':False,'timezone':str(studio_zone('Asia/Shanghai')),'website_management':True,'client_only':True}),encoding='utf-8')
         return 0
     from teacher_connection import select_origin
     origin=select_origin()

@@ -597,7 +597,7 @@ class TeacherDesktopApp:
         items = [
             ('dashboard', '⌂', 'Dashboard'), ('schedule', '▦', 'Schedule'), ('bookings', '✓', 'Bookings'),
             ('students', '◎', 'Students'), ('groups', '◫', 'Groups & chats'), ('files', '⇩', 'Files & codes'),
-            ('meetings', '◉', 'Meetings'), ('settings', '⚙', 'Student site')
+            ('meetings', '◉', 'Meetings'), ('website', '▤', 'Website Management'), ('settings', '⚙', 'Connection & studio')
         ]
         for key, icon, label in items:
             b = tk.Button(side, text=f'  {icon}   {label}', anchor='w', relief='flat', bd=0, padx=14, pady=11,
@@ -742,7 +742,9 @@ class TeacherDesktopApp:
     def toggle_language(self):
         self.lang = 'zh' if self.lang == 'en' else 'en'
         save_language(self.lang)
-        if self.current_page:
+        if self.current_page=='website' and getattr(self,'website_editor',None) and self.website_editor.winfo_exists():
+            self.website_editor.set_language()
+        elif self.current_page:
             self.show_page(self.current_page)
         self.apply_language(self.root)
         if hasattr(self, 'lang_button') and self.lang_button.winfo_exists():
@@ -842,6 +844,9 @@ class TeacherDesktopApp:
             self.message_poll_job = None
 
     def show_page(self, key):
+        editor=getattr(self,'website_editor',None)
+        if getattr(self,'current_page','')=='website' and editor and editor.winfo_exists() and editor.dirty:
+            if not messagebox.askyesno(APP_TITLE,self.tr('Discard unsaved editor changes?'),parent=self.root):return
         self.current_page = key
         self.clear_content()
         meta = {
@@ -852,7 +857,8 @@ class TeacherDesktopApp:
             'groups':('Groups & chats','Persistent class conversations and lesson messages'),
             'files':('Files & access codes','Upload resources and create student download codes'),
             'meetings':('Meetings','Start the native teacher classroom and annotation tools'),
-            'settings':('Student site','Public website details and announcements')
+            'website':('Website Management','Draft, review and publish student-facing content'),
+            'settings':('Connection & studio','OWNER server connection and studio timezone')
         }
         title, subtitle = meta[key]
         self.page_title._mathstudio_en_text = title
@@ -880,7 +886,8 @@ class TeacherDesktopApp:
             self.classes = self.client.json('/api/classes').get('classes', [])
             self.status_label.config(text='● Connected · ' + datetime.now().strftime('%I:%M %p'), bg='#edf7f4', fg='#0f766e')
             self.apply_language(self.status_label)
-            self.show_page(self.current_page or 'dashboard')
+            if self.current_page=='website' and getattr(self,'website_editor',None) and self.website_editor.winfo_exists():self.website_editor.reload()
+            else:self.show_page(self.current_page or 'dashboard')
         except Exception as ex:
             self.status_label.config(text='● Connection problem', bg='#fff0f0', fg='#a52b37')
             self.apply_language(self.status_label)
@@ -1527,6 +1534,11 @@ class TeacherDesktopApp:
         except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
 
     # ----- Settings -----
+    def page_website(self):
+        from teacher_website import WebsiteManagement
+        self.website_editor=WebsiteManagement(self.content,self.client,self.tr,self.show_page)
+        self.website_editor.pack(fill='both',expand=True)
+
     def page_settings(self):
         if getattr(self,'remote',False):
             connection=ttk.Frame(self.content,style='Card.TFrame',padding=12)
@@ -1534,29 +1546,15 @@ class TeacherDesktopApp:
             ttk.Label(connection,text='OWNER server connection',style='Card.TLabel').pack(side='left')
             content_label(ttk.Label,connection,text=self.client.base,style='Card.TLabel').pack(side='left',padx=12)
             ttk.Button(connection,text='Change OWNER server',command=self.change_owner_server).pack(side='right')
-        settings=self.public.get('settings',{})
-        wrap=ttk.Frame(self.content);wrap.pack(fill='both',expand=True);wrap.columnconfigure(0,weight=1);wrap.columnconfigure(1,weight=1)
-        site=ttk.Frame(wrap,style='Card.TFrame',padding=16);site.grid(row=0,column=0,sticky='nsew',padx=(0,8))
-        post=ttk.Frame(wrap,style='Card.TFrame',padding=16);post.grid(row=0,column=1,sticky='nsew',padx=(8,0))
-        ttk.Label(site,text='Student website details',style='Card.TLabel',font=('Segoe UI',12,'bold')).pack(anchor='w')
-        fields={}
-        for key,label in [('name','Studio name'),('headline','Headline'),('teacher','Teacher name'),('contact','Contact')]:
-            ttk.Label(site,text=label,style='Card.TLabel').pack(anchor='w',pady=(8,2));v=tk.StringVar(value=settings.get(key,''));ttk.Entry(site,textvariable=v).pack(fill='x');fields[key]=v
-        ttk.Label(site,text='Introduction',style='Card.TLabel').pack(anchor='w',pady=(8,2));intro=tk.Text(site,height=5,wrap='word');intro.pack(fill='x');intro.insert('1.0',settings.get('intro',''))
-        ttk.Label(site,text='About teacher',style='Card.TLabel').pack(anchor='w',pady=(8,2));about=tk.Text(site,height=5,wrap='word');about.pack(fill='x');about.insert('1.0',settings.get('about',''))
-        timezone=tk.StringVar(value=settings.get('timezone','America/Edmonton'));ttk.Label(site,text='Timezone',style='Card.TLabel').pack(anchor='w',pady=(8,2));ttk.Combobox(site,textvariable=timezone,values=['America/Edmonton','America/Vancouver','America/Toronto','UTC'],state='readonly').pack(fill='x')
+        timezone=tk.StringVar(value=self.public.get('settings',{}).get('timezone','America/Edmonton'))
+        ttk.Label(self.content,text=self.tr('Timezone')).pack(anchor='w',pady=(8,2))
+        ttk.Combobox(self.content,textvariable=timezone,values=['America/Edmonton','America/Vancouver','America/Toronto','UTC'],state='readonly').pack(anchor='w')
         def save():
             try:
-                payload={k:v.get() for k,v in fields.items()};payload['intro']=intro.get('1.0','end').strip();payload['about']=about.get('1.0','end').strip();payload['timezone']=timezone.get();self.client.json('/api/admin/settings',payload);self.refresh_all();messagebox.showinfo(APP_TITLE,self.tr('Student website settings saved.'),parent=self.root)
-            except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
-        ttk.Button(site,text='Save website settings',command=save).pack(anchor='e',pady=(12,0))
-        ttk.Label(post,text='Publish announcement',style='Card.TLabel',font=('Segoe UI',12,'bold')).pack(anchor='w')
-        ttk.Label(post,text='Announcements appear on the student home page.',style='Card.TLabel',foreground='#66767d').pack(anchor='w',pady=(2,8))
-        title=tk.StringVar();ttk.Label(post,text='Title',style='Card.TLabel').pack(anchor='w');ttk.Entry(post,textvariable=title).pack(fill='x',pady=(2,8));ttk.Label(post,text='Message',style='Card.TLabel').pack(anchor='w');body=tk.Text(post,height=13,wrap='word');body.pack(fill='both',expand=True,pady=(2,8))
-        def publish():
-            try:self.client.json('/api/admin/post',{'title':title.get().strip(),'body':body.get('1.0','end').strip()});title.set('');body.delete('1.0','end');messagebox.showinfo(APP_TITLE,self.tr('Announcement published.'),parent=self.root)
-            except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.root)
-        ttk.Button(post,text='Publish',command=publish).pack(anchor='e')
+                self.client.json('/api/admin/settings',{'timezone':timezone.get()});self.refresh_all()
+            except Exception as ex:messagebox.showerror(APP_TITLE,self.tr('Request failed.')+'\n\n'+str(ex),parent=self.root)
+        ttk.Button(self.content,text=self.tr('Save studio timezone'),command=save).pack(anchor='w',pady=12)
+        ttk.Button(self.content,text=self.tr('Website Management'),command=lambda:self.show_page('website')).pack(anchor='w')
 
     def change_owner_server(self):
         if not messagebox.askyesno(APP_TITLE,self.tr('Change OWNER server? Finish active lessons first. This signs you out of the dashboard.'),parent=self.root):return

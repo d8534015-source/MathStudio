@@ -2,6 +2,7 @@
 Run: py server.py | py server.py add-admin | py server.py reset-password
 """
 import public_translations
+import website_content
 import contextlib
 import getpass
 import hashlib
@@ -1116,10 +1117,16 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/admin/content-translations':
             self.require_user(True)
             with db() as c: return public_translations.admin(c)
+        if path=='/api/admin/website-content':
+            self.require_user(True)
+            with db() as c:return website_content.state(c)
         if path=='/api/public':
             with db() as c:
                 settings={r['key']:r['value'] for r in c.execute('SELECT * FROM settings') if r['key'] in DEFAULTS}
-                posts=[dict(r) for r in c.execute('SELECT * FROM posts ORDER BY id DESC LIMIT 30')]
+                shown=website_content.visibility(c)
+                for key in website_content.SETTINGS:
+                    if not shown.get('settings:0:'+key,True):settings[key]=''
+                posts=[dict(r) for r in c.execute('SELECT * FROM posts WHERE published=1 ORDER BY id DESC LIMIT 30')]
                 translations={lang:public_translations.public(c,lang)['translations'] for lang in ('en','zh')}
             try: rules=timezone_rules(settings['timezone'],datetime.now(timezone.utc).year)
             except TimezoneDataError as ex: raise APIError(str(ex),503)
@@ -1137,6 +1144,7 @@ class Handler(BaseHTTPRequestHandler):
             return {'code':code,'class_id':item['class_id'],'title':item['title'],'live':True}
         if path=='/api/classes':
             with db() as c:
+                shown=website_content.visibility(c)
                 rows=c.execute('''SELECT classes.*, (SELECT count(*) FROM bookings b WHERE b.class_id=classes.id) AS booked,
                   EXISTS(SELECT 1 FROM bookings b WHERE b.class_id=classes.id AND b.user_id=?) AS mine,
                   COALESCE(classes.group_price_label,lesson_types.price_label,'') AS price_label
@@ -1157,6 +1165,7 @@ class Handler(BaseHTTPRequestHandler):
                           and access.get('expires',0)>now)
                 if not (row['mine'] or public_group or admitted): continue
                 item={key:row[key] for key in fields}
+                if row['class_kind']=='group' and not shown.get(f"groups:{row['id']}:description",True):item['description']=''
                 if row['mine']: item['group_chat_id']=row['group_chat_id']
                 visible.append(item)
             return {'classes':visible}
@@ -1164,6 +1173,9 @@ class Handler(BaseHTTPRequestHandler):
             now=time.time(); horizon=now+70*86400
             with db() as c:
                 lessons=[dict(r) for r in c.execute("SELECT * FROM lesson_types WHERE active=1 ORDER BY name,minutes")]
+                shown=website_content.visibility(c)
+                for lesson in lessons:
+                    if not shown.get(f"courses:{lesson['id']}:description",True):lesson['description']=''
                 availability=[dict(r) for r in c.execute("SELECT * FROM availability WHERE status='open' AND end>? AND start<? ORDER BY start",(now,horizon))]
                 busy=[dict(r) for r in c.execute("SELECT id,start,minutes,approval,status FROM classes WHERE status='scheduled' AND approval IN ('pending','confirmed') AND start<? AND start+minutes*60>? ORDER BY start",(horizon,now))]
             return {'lesson_types':lessons,'availability':availability,'busy':busy}
@@ -1334,10 +1346,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send(frame,mime='image/jpeg'); return None
         if path.startswith('/api/'): raise APIError('Not found.',404)
         if path=='/admin': self.send_redirect('/teacher'); return None
+        if path=='/teacher/translations':self.send_redirect('/teacher');return None
         if path=='/build_info.js':
             self.send(('export const BUILD_ID='+json.dumps(BUILD_ID)+'; export const ASSET_VERSION='+json.dumps(ASSET_VERSION)+';').encode(),mime='text/javascript; charset=utf-8');return None
-        files={'/teacher':'teacher.html','/teacher_page.js':'teacher_page.js','/':'index.html' ,'/app.js':'app.js','/web_i18n.js':'web_i18n.js','/locales.js':'locales.js','/public_content.js':'public_content.js','/translation_manager.js':'translation_manager.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
-        if path not in files and path in ('/booking','/login','/signup','/account','/classroom','/resources','/messages','/join','/teacher/translations'): path='/'
+        files={'/teacher':'teacher.html','/teacher_page.js':'teacher_page.js','/':'index.html' ,'/app.js':'app.js','/web_i18n.js':'web_i18n.js','/locales.js':'locales.js','/public_content.js':'public_content.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
+        if path not in files and path in ('/booking','/login','/signup','/account','/classroom','/resources','/messages','/join'): path='/'
         need(path in files,'Page not found.',404)
         f=ROOT/files[path]; mime=mimetypes.guess_type(f.name)[0] or 'application/octet-stream'
         if f.suffix=='.js': mime='text/javascript'
@@ -1489,6 +1502,10 @@ class Handler(BaseHTTPRequestHandler):
             return {'ok':True}
         if path.startswith('/api/admin/'):
             self.require_user(True)
+            if path=='/api/admin/website-content':
+                try:
+                    with db() as c:return website_content.action(c,d,self.user['name'])
+                except website_content.ContentError as ex:raise APIError(ex.message,ex.status)
             if path=='/api/admin/content-translations':
                 try: return public_translations.action(db,d,_translate_online)
                 except public_translations.TranslationError as ex: raise APIError(ex.message,ex.status)

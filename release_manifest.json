@@ -5,11 +5,11 @@
     "build_id": "v41.6.6-delivery-candidate1",
     "asset_version": "41_6_6_delivery1"
   },
-  "parent_commit": "cffa6c8f9fce828c6530b3ce123c688b386b54c1",
-  "status": "OWNER Argos supported MiniSBD review candidate; real sentence inference verified, complete translation and Windows 11 acceptance pending.",
+  "parent_commit": "cd09b99483abf1c2260bcf9c91183280df1b4f4b",
+  "status": "Teacher Website Management review candidate stacked on PR #8; no production deployment.",
   "folders": {
-    "owner": "MathStudio_v41_6_6_OWNER_Argos_MiniSBD_Review_Candidate",
-    "teacher": "MathStudio_v41_6_6_TEACHER_READY_Delivery_Candidate"
+    "owner": "MathStudio_v41_6_6_OWNER_Website_Management_Review",
+    "teacher": "MathStudio_v41_6_6_TEACHER_Website_Management_Review"
   },
   "runtime": {
     "python": "CPython x64 3.12–3.14; Cloud-tested 3.12.14 Linux only",
@@ -185,7 +185,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "5097f88bf19598282d7ef6992ec218be078df1a95c38cf865b34d1aa2fb4692c"
+      "sha256": "a22df7265ab5b2434f88e97a038b9a7dee50d08c13bfb07741ed1ab63b08f837"
     },
     "build_info.py": {
       "packages": [
@@ -280,7 +280,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "c7466da95826763f94a90ccfa8e436d7ecd9654b1f564c37ea1ae3c9f120e77c"
+      "sha256": "043065f51c7b0a7d781ca5238e13b2a0f7bd8826c17cd8ac893f37db5a482e97"
     },
     "runtime_setup.py": {
       "packages": [
@@ -293,7 +293,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "2d67b3ad3197b9137e23899fbabe0c97661b19b19cf09140392b2328a997f6a6"
+      "sha256": "b96560594f99cb6cc654819d976777a5f630373c346cd81412f549b5f8be8571"
     },
     "setup_free_media.ps1": {
       "packages": [
@@ -330,7 +330,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "f3caf7c98a22cec6dfff041e94f23781e4084f117c5fcf09b1d926734a0395af"
+      "sha256": "69a037a6908eaf8c61c3e864589b9a248cbd32569c6ec42083ea15dacc62a7b1"
     },
     "teacher_app_bootstrap.py": {
       "packages": [
@@ -358,14 +358,14 @@
         "owner",
         "teacher"
       ],
-      "sha256": "3c81b2fab135ccdff706f9daa3dd6ced6d0097c33926f465cfba89016398f5d5"
+      "sha256": "c5469b863a87e2523b182fe4e4ada210b08f257d95cba0b58e628bc991e9bd99"
     },
     "teacher_localization.py": {
       "packages": [
         "owner",
         "teacher"
       ],
-      "sha256": "d4866c3b6279e8b726a099513e95e879c7629413ae566f09cf5dd5210ec6c9c1"
+      "sha256": "dbe32a5352b4c05980bc9244a59e43fa0141f8b16d3ecaf94bdfec8ac0173ae8"
     },
     "teacher_meeting_app.py": {
       "packages": [
@@ -443,7 +443,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "969db92e9f94697f3c5d39edfcf43225a7ad06b0a37dd8efdd3bd2d6ef058bf5"
+      "sha256": "211fbe57b180ba4e6291010845fc3c385ab77c834ef683476092cb1dab808dfa"
     },
     "test_windows_startup.py": {
       "packages": [
@@ -455,19 +455,19 @@
       "packages": [
         "owner"
       ],
-      "sha256": "62d2aa53e5e145167b7991f20c0d49ac581b9123454e8f87a3a90e54dd7f190a"
+      "sha256": "38e836bfbbd68599b0bc1dee6559bf064230267fecdb2eca97224765d818d455"
     },
     "packaging/windows/MathStudio.spec": {
       "packages": [
         "owner"
       ],
-      "sha256": "ca886ef442c983b49d8396d6554fcaf690e1066b53e4124d0cece88a3da4c131"
+      "sha256": "7113c358ecc77ec5edf5f4044101b42284f5c88f724680ee9748cd2c2b258fab"
     },
     "packaging/windows/MathStudio.iss": {
       "packages": [
         "owner"
       ],
-      "sha256": "464cba6e42a9b98fea165a99781c73bcd1ddaac703420468a5b183647637e0c3"
+      "sha256": "5e142ad0c2b9777f08ae27449eab07de233e302df697e76e1c6d6abdf1f15e11"
     },
     "packaging/windows/requirements-build.txt": {
       "packages": [
@@ -479,7 +479,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "4b1c09c8835014c408ee2a893ec40e6ad46c4505ce69960246c98452650872cd"
+      "sha256": "b4ad36370eca77c1cb70e1345b1825f37d84a80e724d531f2bbff996e0bdb4ae"
     },
     "packaging/windows/README.md": {
       "packages": [
@@ -491,7 +491,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "f35d709e8c13022f8d25903fcacc4ace47fde05799974074c3548f8f539024ca"
+      "sha256": "9550362c83851446101b89862f75a57864583f0335cbf82d0b8d06fc4b11baf5"
     },
     "packaging/windows/check_owner_cleanup.py": {
       "packages": [
@@ -509,7 +509,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "b88ebfb94bf2927637a2e442572b7a6f027ac1c31a25a9739ae79f01e34e461d"
+      "sha256": "0646808de83ebd94ad72219573725f35875bb067d88e3abe24a7a3169954bb7b"
     },
     "web_i18n.js": {
       "packages": [
@@ -521,7 +521,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "e435ef956dd540f2969ad5e3b67e7a8d9349594fdb32f9b5f62171a7f6616381"
+      "sha256": "4151f14275bbddb8d3c70c852c15cbb6e4aa0307cb230af144c05ed603d5df80"
     },
     "public_content.js": {
       "packages": [
@@ -551,7 +551,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "7c25632256ec29ef3fc71c1fcecdc84c63b4adc50f12165ff90cbf60383d8c18"
+      "sha256": "a78311f1f9233c6f6906533acebf416edc83e2897d44ebf7249e9031a6db1753"
     },
     "PUBLIC_TRANSLATION_SETUP.md": {
       "packages": [
@@ -678,6 +678,44 @@
         "owner"
       ],
       "sha256": "60da4328fc446177d727e039168deb63b01f89965d671c9f1ac04f106945e540"
+    },
+    "teacher_website.py": {
+      "packages": [
+        "owner",
+        "teacher"
+      ],
+      "sha256": "40b6af2c3d4f28cd4bab9464a3cdc6986fc6bb4ee7bb1f53a5145aa06ab4a823"
+    },
+    "website_content.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "f623fb13dac52ef40c02f63f30722d513d542d8ff7b167f04ba874ae9d243a6e"
+    },
+    "test_website_management.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "7ceca2de189d50253e1144011ef2aa0bd2176b048bd6a8c3bed707e09c4ac6cc"
+    },
+    "WEBSITE_MANAGEMENT.md": {
+      "packages": [
+        "owner",
+        "teacher"
+      ],
+      "sha256": "5c30342055cf968d062cda7d531ff35c0f14e8d3fd9a1c6bc533f652c3425bd1"
+    },
+    "packaging/windows/check_client_payload.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "5ebe3456c4e2779f0f3971b45f3d8e1e7d2449c2e3de569ba298b68d9cc65f70"
+    },
+    "website-management-review/TEST_RESULTS.md": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "0a16728ee17604553d1abf5ee9bfbfe39af6bca754f1df07cf712382b49dfbaa"
     }
   }
 }

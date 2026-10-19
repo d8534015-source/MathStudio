@@ -1,10 +1,17 @@
 """Stable per-user state; explicitly preserve existing in-place installations."""
 import os
+import json
+import sys
 from pathlib import Path
 
 
 def state_directory():
     base=Path(os.environ.get('LOCALAPPDATA') or (Path.home()/'.local'/'share'))
+    if getattr(sys,'frozen',False):
+        try:
+            marker=json.loads(Path(__file__).with_name('teacher_package_role.json').read_text(encoding='utf-8'))
+            if marker.get('review') is True:return base/'MathStudioReview'
+        except (OSError,ValueError):pass
     return base/'MathStudio'
 
 

@@ -20,9 +20,12 @@ def run(command,**kwargs):
     subprocess.run([str(x) for x in command],check=True,**kwargs)
 
 
-def assets():
+def assets(review=False):
     from PIL import Image,ImageDraw
     target=HERE/'generated';target.mkdir(exist_ok=True)
+    role=json.loads((ROOT/'teacher_package_role.json').read_text(encoding='utf-8'))
+    if review:role['review']=True
+    (target/'teacher_package_role.json').write_text(json.dumps(role)+'\n',encoding='utf-8')
     image=Image.new('RGBA',(256,256),'#0d2f34');draw=ImageDraw.Draw(image)
     draw.rounded_rectangle((8,8,248,248),radius=48,fill='#0d2f34',outline='#22a699',width=10)
     draw.line([(55,190),(55,65),(128,145),(201,65),(201,190)],fill='#dff5ed',width=20,joint='curve')
@@ -33,6 +36,7 @@ def assets():
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--freeze',action='store_true',help=argparse.SUPPRESS)
+    parser.add_argument('--review',action='store_true',help='Isolated review installer; does not replace the installed teacher app')
     parser.add_argument('--output',type=Path,default=ROOT/'work'/'windows-build')
     args=parser.parse_args();output=args.output.resolve()
     if sys.platform!='win32':raise SystemExit('A genuine Windows x64 runner is required; cross-building a Windows EXE on Linux is unsupported.')
@@ -44,21 +48,24 @@ def main():
         run([python,'-m','pip','install','--require-hashes','--only-binary=:all:',
             '--index-url','https://pypi.org/simple','-r',ROOT/'requirements.txt','-r',HERE/'requirements-build.txt'])
         run([python,'-m','pip','check'])
-        run([python,__file__,'--freeze','--output',output]);return
-    assets()
+        run([python,__file__,'--freeze','--output',output]+(['--review'] if args.review else []));return
+    assets(args.review)
     # Explicit manifest validation detects source tampering before freezing.
     from_source=subprocess.run([sys.executable,str(ROOT/'release_package.py'),'--kind','teacher'],check=True)
     run([sys.executable,'-m','PyInstaller','--noconfirm','--clean','--distpath',output/'dist',
         '--workpath',output/'freeze',HERE/'MathStudio.spec'],cwd=ROOT)
+    from check_client_payload import inspect_payload
+    payload_check=inspect_payload(output/'dist'/'MathStudioClient')
     # Compiler is downloaded only from its pinned upstream release; no discovered scripts.
     compiler=output/'inno-installer.exe'
     with urllib.request.urlopen(INNO_URL,timeout=60) as response:compiler.write_bytes(response.read())
     if hashlib.sha256(compiler.read_bytes()).hexdigest()!=INNO_SHA:raise RuntimeError('Inno Setup compiler checksum mismatch.')
     run([compiler,'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/DIR='+str(output/'inno')])
-    run([output/'inno'/'ISCC.exe','/DBuildRoot='+str(output),HERE/'MathStudio.iss'])
-    installer=output/'installer'/'MathStudio.exe'
+    run([output/'inno'/'ISCC.exe','/DBuildRoot='+str(output)]+(['/DReviewBuild=1'] if args.review else [])+[HERE/'MathStudio.iss'])
+    installer=output/'installer'/('MathStudio-Website-Management-Review.exe' if args.review else 'MathStudio.exe')
+    (installer.parent/'client-isolation.json').write_text(json.dumps(payload_check,indent=2)+'\n',encoding='utf-8')
     digest=hashlib.sha256(installer.read_bytes()).hexdigest()
-    (installer.parent/'SHA256SUMS.txt').write_text(digest+'  MathStudio.exe\n',encoding='utf-8')
+    (installer.parent/'SHA256SUMS.txt').write_text(digest+'  '+installer.name+'\n',encoding='utf-8')
     from build_info import BUILD_ID
     inventory={str(p.relative_to(output/'dist')):hashlib.sha256(p.read_bytes()).hexdigest()
         for p in (output/'dist').rglob('*') if p.is_file()}
@@ -66,7 +73,7 @@ def main():
         'source_manifest_sha256':hashlib.sha256((ROOT/'release_manifest.json').read_bytes()).hexdigest(),
         'requirements_sha256':hashlib.sha256((ROOT/'requirements.txt').read_bytes()).hexdigest(),
         'build_requirements_sha256':hashlib.sha256((HERE/'requirements-build.txt').read_bytes()).hexdigest(),
-        'compiler_sha256':INNO_SHA,'signed':False,'payload':inventory},indent=2)+'\n',encoding='utf-8')
+        'compiler_sha256':INNO_SHA,'signed':False,'review':args.review,'payload':inventory},indent=2)+'\n',encoding='utf-8')
     print('Unsigned installer built: '+str(installer)+' SHA256 '+digest)
 
 
