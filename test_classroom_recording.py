@@ -97,6 +97,14 @@ class RecordingTests(BackendCase):
         self.app.RECORDING_STORE.delete(rid,self.uid('teacher'));self.cloud.remove.assert_called_once()
         self.assertFalse(path.with_suffix('.webm').exists())
 
+    def test_unrelated_recordings_never_share_a_cloud_transfer_lock(self):
+        # Holding all references models simultaneous uploads/chunk requests.
+        # A fixed lock-stripe pool made unrelated recordings block each other.
+        store=self.app.RECORDING_STORE
+        locks=[store.record_lock(f'{i:032x}') for i in range(20)]
+        self.assertEqual(len({id(lock) for lock in locks}),20)
+        self.assertIs(store.record_lock(f'{0:032x}'),locks[0])
+
     def test_recovery_uploads_to_cloud_and_removes_spool_after_acknowledgment(self):
         t,s,cid,tp,sp,rid,action=self.active();self.chunk(rid,t)
         store=self.app.RECORDING_STORE

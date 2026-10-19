@@ -7,11 +7,12 @@ import secrets
 import shutil
 import threading
 import time
+import weakref
 
 
 class Store:
     def __init__(self,data,db,error,cloud):
-        self.data=Path(data);self.db=db;self.error=error;self.locks=[threading.RLock() for _ in range(16)];self.activity={}
+        self.data=Path(data);self.db=db;self.error=error;self.locks=weakref.WeakValueDictionary();self.locks_guard=threading.Lock();self.activity={}
         self.recovery_before=time.time();self.folder=self.data/'recordings';self.cloud=cloud;self.wake=threading.Event();self.closed=threading.Event();self.worker=None
         with db() as c:c.execute('''CREATE TABLE IF NOT EXISTS recordings(
             id TEXT PRIMARY KEY, owner INTEGER NOT NULL, class_id INTEGER NOT NULL,
@@ -21,7 +22,11 @@ class Store:
             upload_id TEXT NOT NULL DEFAULT '',parts TEXT NOT NULL DEFAULT '[]',
             interrupted INTEGER NOT NULL DEFAULT 0)''')
 
-    def record_lock(self,record_id):return self.locks[int(hashlib.sha256(str(record_id).encode()).hexdigest()[:2],16)%16]
+    def record_lock(self,record_id):
+        # Active operations retain their lock; completed/invalid IDs cannot grow
+        # a permanent dictionary, and different recordings never share a lock.
+        with self.locks_guard:
+            return self.locks.setdefault(record_id,threading.RLock())
 
     def require(self,condition,message,status=409):
         if not condition:raise self.error(message,status)
