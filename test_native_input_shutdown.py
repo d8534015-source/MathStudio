@@ -68,13 +68,26 @@ class Win32InputTests(unittest.TestCase):
             for x in (30,130,70):
                 root.geometry(f'360x160+{x}+30');root.update();self.assertTrue(app.protect_controls());surface.lift();root.update();self.assertEqual(hit(),root_hwnd)
             # An additional native control panel is excluded too.
-            panel=tk.Toplevel(root);panel.geometry('150x100+450+40');panel.update();self.assertTrue(app.protect_controls());surface.lift();root.update()
-            point=wintypes.POINT(panel.winfo_rootx()+20,panel.winfo_rooty()+20)
-            self.assertEqual(u.GetAncestor(u.WindowFromPoint(point),native.GA_ROOT),u.GetAncestor(panel.winfo_id(),native.GA_ROOT))
+            panel=tk.Toplevel(root);panel.transient(root);panel.geometry('150x100+450+40')
+            panel_button=tk.Button(panel,text='Stop recording');panel_button.pack(fill='both',expand=True)
+            panel.update();self.assertTrue(app.protect_controls());surface.lift();root.update()
+            point=wintypes.POINT(panel_button.winfo_rootx()+20,panel_button.winfo_rooty()+20)
+            # Check the native region separately from Z-order/hit-test delivery.
+            gdi=ctypes.windll.gdi32
+            u.GetWindowRgn.argtypes=[wintypes.HWND,wintypes.HRGN];u.GetWindowRgn.restype=ctypes.c_int
+            gdi.PtInRegion.argtypes=[wintypes.HRGN,ctypes.c_int,ctypes.c_int];gdi.PtInRegion.restype=wintypes.BOOL
+            region=gdi.CreateRectRgn(0,0,0,0);bounds=wintypes.RECT()
+            try:
+                self.assertTrue(u.GetWindowRgn(input_hwnd,region));u.GetWindowRect(input_hwnd,ctypes.byref(bounds))
+                self.assertFalse(gdi.PtInRegion(region,point.x-bounds.left,point.y-bounds.top),'Mapped control must be outside installed input region')
+            finally:gdi.DeleteObject(region)
+            hit_root=u.GetAncestor(u.WindowFromPoint(point),native.GA_ROOT);panel_root=u.GetAncestor(panel.winfo_id(),native.GA_ROOT)
+            category='input' if hit_root==input_hwnd else 'toolbar' if hit_root==root_hwnd else 'panel' if hit_root==panel_root else 'other'
+            self.assertEqual(hit_root,panel_root,'Control target classification='+category)
             for _ in range(20):app.set_mode(False);app.set_mode(True);root.update()
             u.SetCapture.argtypes=[wintypes.HWND];u.SetCapture.restype=wintypes.HWND
             u.SetCapture(canvas.winfo_id());self.assertTrue(u.GetCapture())
-            surface.event_generate('<Escape>');root.update()
+            surface.focus_force();root.update();surface.event_generate('<Escape>');root.update()
             self.assertFalse(u.GetCapture());self.assertFalse(surface.winfo_ismapped());self.assertFalse(app.draw_mode)
         finally:
             root.destroy();app=None;root=None;gc.collect()
