@@ -18,6 +18,7 @@ import re
 import secrets
 import socket
 import sqlite3
+import ssl
 import subprocess
 import sys
 import threading
@@ -231,9 +232,10 @@ def db():
 
 RECORDING_HANDOFFS={}
 RECORDING_STORE=None
+RECORDING_SHARING=None
 
 def init():
-    global RECORDING_STORE
+    global RECORDING_STORE,RECORDING_SHARING
     DATA.mkdir(parents=True,exist_ok=True)
     with db() as c:
         c.executescript('''
@@ -321,6 +323,8 @@ def init():
     from classroom_recording import Store
     from recording_cloud import R2
     RECORDING_STORE=Store(DATA,db,APIError,R2(storage_config))
+    from recording_resources import Sharing
+    RECORDING_SHARING=Sharing(RECORDING_STORE,db,APIError)
 
 def hash_password(password):
     salt=secrets.token_hex(16)
@@ -558,7 +562,7 @@ def upload_filename(value):
 def normalize_resource_code(value):
     need(isinstance(value,str),'Enter an access code.')
     code=re.sub(r'[^A-Z0-9]','',value.upper())
-    need(4<=len(code)<=16,'Enter a valid access code.')
+    need(4<=len(code)<=24,'Enter a valid access code.')
     return code
 
 def make_resource_code(c):
@@ -578,13 +582,16 @@ def active_resource_codes_in_text(text):
     # Generated codes are six characters from an ambiguity-safe alphabet. Only
     # codes that currently exist and are active become classroom download links.
     candidates=[]
-    for match in re.findall(r'(?<![A-Z0-9])([A-HJ-NP-Z2-9]{6})(?![A-Z0-9])',text.upper()):
+    for match in re.findall(r'(?<![A-Z0-9])((?:[A-HJ-NP-Z2-9]{20}|[A-HJ-NP-Z2-9]{6}))(?![A-Z0-9])',text.upper()):
         if match not in candidates: candidates.append(match)
     if not candidates: return []
     marks=','.join('?' for _ in candidates)
     with db() as c:
         rows=c.execute(f'SELECT code,label FROM resource_codes WHERE active=1 AND code IN ({marks})',candidates).fetchall()
     found={row['code']:row['label'] for row in rows}
+    with RECORDING_STORE.features.db() as c:
+        for code in candidates:
+            if len(code)==20 and c.execute('SELECT 1 FROM recording_codes WHERE code_hash=? AND revoked=0 AND expires>?',(hashlib.sha256(code.encode()).hexdigest(),time.time())).fetchone():found[code]='Recording resource'
     return [{'code':code,'label':found[code]} for code in candidates if code in found]
 
 
@@ -737,8 +744,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Permissions-Policy','camera=(self), microphone=(self), display-capture=(self)')
         self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         if getattr(self,'sid',None):
-            secure='; Secure' if self.headers.get('X-Forwarded-Proto','').lower()=='https' else ''
+            secure='; Secure' if (self.headers.get('X-Forwarded-Proto','').lower()=='https' or isinstance(self.connection,ssl.SSLSocket)) else ''
             self.send_header('Set-Cookie',f'{COOKIE}={self.sid}; Path=/; HttpOnly; SameSite=Strict{secure}')
+        if getattr(self,'student_cookie',None):self.send_header('Set-Cookie',self.student_cookie)
         self.end_headers()
         try: self.wfile.write(data)
         except (BrokenPipeError,ConnectionResetError): pass
@@ -758,8 +766,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Frame-Options','DENY')
         self.send_header('Permissions-Policy','camera=(self), microphone=(self), display-capture=(self)')
         if getattr(self,'sid',None):
-            secure='; Secure' if self.headers.get('X-Forwarded-Proto','').lower()=='https' else ''
+            secure='; Secure' if (self.headers.get('X-Forwarded-Proto','').lower()=='https' or isinstance(self.connection,ssl.SSLSocket)) else ''
             self.send_header('Set-Cookie',f'{COOKIE}={self.sid}; Path=/; HttpOnly; SameSite=Strict{secure}')
+        if getattr(self,'student_cookie',None):self.send_header('Set-Cookie',self.student_cookie)
         self.end_headers()
         try: self.wfile.write(data)
         except (BrokenPipeError,ConnectionResetError): pass
@@ -771,9 +780,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Referrer-Policy','no-referrer')
         self.send_header('X-Content-Type-Options','nosniff')
         if getattr(self,'sid',None):
-            secure='; Secure' if self.headers.get('X-Forwarded-Proto','').lower()=='https' else ''
+            secure='; Secure' if (self.headers.get('X-Forwarded-Proto','').lower()=='https' or isinstance(self.connection,ssl.SSLSocket)) else ''
             self.send_header('Set-Cookie',f'{COOKIE}={self.sid}; Path=/; HttpOnly; SameSite=Strict{secure}')
         self.send_header('Content-Length','0')
+        if getattr(self,'student_cookie',None):self.send_header('Set-Cookie',self.student_cookie)
         self.end_headers()
 
     def resource_grant(self):
@@ -840,6 +850,7 @@ class Handler(BaseHTTPRequestHandler):
         return {'ok':True,'file':{'id':file_id,'name':name,'size':length,'mime':mime,'backend':backend}}
 
     def prepare(self):
+        self.student_cookie=None
         self.sid=None
         self.session={'user':None,'csrf':secrets.token_hex(32)}
         self.path_only=urlsplit(self.path).path
@@ -902,6 +913,18 @@ class Handler(BaseHTTPRequestHandler):
                 if not owner_auth.session_valid(c,self.session['remember_id'],self.user):
                     self.rotate(None)
                     self.user=None
+        import student_auth
+        features=RECORDING_STORE.features
+        if self.session.get('student_persistent') and not student_auth.validate(features,self.session['student_persistent'],self.user):
+            self.rotate(None);self.user=None;self.student_cookie=student_auth.cookie('',0)
+        if self.user is None and self.command=='GET' and self.path_only=='/api/me' and student_auth.COOKIE in cookies:
+            def lookup(uid):
+                with db() as c:return c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
+            restored=student_auth.restore(features,cookies[student_auth.COOKIE].value,lookup)
+            if restored:
+                user,token,selector,remaining=restored
+                self.rotate(user['id']);self.session['student_persistent']=selector;self.user=user;self.student_cookie=student_auth.cookie(token,remaining)
+            else:self.student_cookie=student_auth.cookie('',0)
         if self.user is None and isinstance(self.session.get('guest_identity'),dict):
             guest=self.session['guest_identity']
             self.user={'id':guest.get('id'),'username':'guest','name':guest.get('name','Guest'),'role':'guest'}
@@ -1020,7 +1043,7 @@ class Handler(BaseHTTPRequestHandler):
                     need(item and item['expires']>time.time(),'Recording link expired. Open Recordings from the teacher app again.',403)
                     with db() as c:user=validate_token_user(item,c,{},admin=True)
                     if not self.user or self.user['id']!=user['id']:self.rotate(user['id'])
-                self.send_redirect('/recordings?selected='+item['record_id']+'&download='+('1' if item['download'] else '0'));return
+                self.send_redirect('/recordings?'+('manage=' if item.get('manage') else 'selected=')+item['record_id']+'&download='+('1' if item['download'] else '0'));return
             if not post and self.path_only=='/teacher-media-login':
                 token=self.query.get('token',[''])[0]
                 with LOCK:
@@ -1142,8 +1165,49 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as ex:
             print('Unexpected server error:',type(ex).__name__,str(ex)); self.send({'error':'Unexpected server error. Please retry.'},500)
 
+    def stream_recording(self,row,download,playback=False):
+        try:response=RECORDING_STORE.cloud.open({**row,'id':row['id']+'_playback'} if playback else row,self.headers.get('Range'))
+        except ValueError:raise APIError('Invalid byte range.',416)
+        except RuntimeError:raise APIError('Private cloud storage is unavailable.',503)
+        with response:
+            self.send_response(response.status)
+            for name in ('Content-Length','Content-Range','Accept-Ranges'):
+                if response.headers.get(name):self.send_header(name,response.headers[name])
+            self.send_header('Content-Type',row['mime'])
+            ext='mp4' if row['mime']=='video/mp4' else 'webm'
+            mode='attachment' if download else 'inline'
+            self.send_header('Content-Disposition',f'{mode}; filename="MathStudio-recording.{ext}"')
+            self.send_header('Cache-Control','private, no-store');self.send_header('X-Content-Type-Options','nosniff')
+            self.send_header('Referrer-Policy','no-referrer');self.end_headers()
+            try:
+                while True:
+                    block=response.read(256*1024)
+                    if not block:break
+                    self.wfile.write(block)
+            except (BrokenPipeError,ConnectionResetError):pass
+        return None
     def get_api(self):
         path=self.path_only
+        if path in ('/policies/privacy','/policies/terms','/policies/cookies'):
+            import policy_service
+            self.send(policy_service.document(path.rsplit('/',1)[-1],self.query.get('lang',['en'])[0]),mime='text/html; charset=utf-8');return None
+        if path=='/api/policies':
+            import policy_service
+            return policy_service.metadata()
+        if path=='/api/account/recording-authorization':
+            self.require_user();need(self.user['role']=='student','Student account required.',403)
+            from recording_authorization import status
+            return status(RECORDING_STORE.features,self.user['id'])
+        if path=='/resource/recording':
+            limit_requests([('recording-view:'+str(self.user['id'] if self.user else self.client_ip()),180,60)],'Too many recording requests. Try again shortly.')
+            access=self.resource_grant();need(access.get('type')=='recording','Recording grant unavailable.',403)
+            download=self.query.get('download',['0'])[0]=='1'
+            row=RECORDING_SHARING.authorize(access['code_hash'],self.user,download)
+            if not download:
+                with RECORDING_STORE.features.db() as c:ready=c.execute("SELECT 1 FROM recording_playback WHERE id=? AND state='ready'",(row['id'],)).fetchone()
+                need(ready,'Recording playback is not ready.',409)
+            RECORDING_STORE.features.audit('download' if download else 'play',self.user['id'],row['id'],access['code_hash'])
+            return self.stream_recording(row,download,playback=not download)
         if path=='/api/admin/recordings':
             self.require_user(True);return RECORDING_STORE.listing(self.user['id'])
         if path=='/api/admin/recordings/content':
@@ -1153,32 +1217,17 @@ class Handler(BaseHTTPRequestHandler):
             need(grant and grant['id']==record_id and grant['expires']>time.time(),'Recording access expired. Open playback again.',403)
             row=RECORDING_STORE.row(record_id,self.user['id'])
             need(row['state']=='ready' and row['expires']>time.time(),'Recording is not available.',404)
-            try:response=RECORDING_STORE.cloud.open(row,self.headers.get('Range'))
-            except ValueError:raise APIError('Invalid byte range.',416)
-            except RuntimeError:raise APIError('Private cloud storage is unavailable.',503)
-            with response:
-                self.send_response(response.status)
-                for name in ('Content-Length','Content-Range','Accept-Ranges'):
-                    if response.headers.get(name):self.send_header(name,response.headers[name])
-                self.send_header('Content-Type',row['mime'])
-                ext='mp4' if row['mime']=='video/mp4' else 'webm'
-                mode='attachment' if self.query.get('download',['0'])[0]=='1' else 'inline'
-                self.send_header('Content-Disposition',f'{mode}; filename="MathStudio-recording.{ext}"')
-                self.send_header('Cache-Control','private, no-store');self.send_header('X-Content-Type-Options','nosniff')
-                self.send_header('Referrer-Policy','no-referrer');self.end_headers()
-                try:
-                    while True:
-                        block=response.read(256*1024)
-                        if not block:break
-                        self.wfile.write(block)
-                except (BrokenPipeError,ConnectionResetError):pass
-            return None
+            download=self.query.get('download',['0'])[0]=='1'
+            with RECORDING_STORE.features.db() as c:indexed=c.execute("SELECT 1 FROM recording_playback WHERE id=? AND state='ready'",(row['id'],)).fetchone()
+            return self.stream_recording(row,download,playback=not download and bool(indexed))
         if path=='/api/desktop/setup-status':
             import owner_auth
             limit_requests([('setup-status:'+self.client_ip(),60,60),('setup-status-global',600,60)],'Too many attempts. Try again later.')
             with db() as c:return {'initialized':owner_auth.initialized(c)}
         if path=='/api/desktop-info': return {'build':BUILD_ID,'port':PORT,'public_origin':current_public_origin(),'lan_origin':f'http://{self.server.server_address[0] if self.server.server_address[0] not in ("0.0.0.0","::") else "127.0.0.1"}:{PORT}','cloudflare_turn_configured':bool(os.environ.get('CLOUDFLARE_TURN_KEY_ID','').strip() and os.environ.get('CLOUDFLARE_TURN_API_TOKEN','').strip())}
-        if path=='/api/me': return {'user':public_user(self.user),'csrf':self.session['csrf']}
+        if path=='/api/me':
+            import policy_service
+            return {'user':public_user(self.user),'csrf':self.session['csrf'],'policies':policy_service.metadata(),'policies_due':bool(self.user and self.user['role']=='student' and policy_service.due(RECORDING_STORE.features,self.user['id']))}
         if path=='/api/content-translations':
             try:
                 with db() as c: return public_translations.public(c,self.query.get('lang',['en'])[0])
@@ -1418,7 +1467,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/teacher/translations':self.send_redirect('/teacher');return None
         if path=='/build_info.js':
             self.send(('export const BUILD_ID='+json.dumps(BUILD_ID)+'; export const ASSET_VERSION='+json.dumps(ASSET_VERSION)+';').encode(),mime='text/javascript; charset=utf-8');return None
-        files={'/recordings':'recordings.html','/recordings.js':'recordings.js','/classroom_recorder.js':'classroom_recorder.js','/teacher':'teacher.html','/teacher_page.js':'teacher_page.js','/':'index.html' ,'/app.js':'app.js','/web_i18n.js':'web_i18n.js','/locales.js':'locales.js','/public_content.js':'public_content.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
+        files={'/privacy-settings':'index.html','/recordings':'recordings.html','/recordings.js':'recordings.js','/account_privacy.js':'account_privacy.js','/recording_management.js':'recording_management.js','/recording_resource.js':'recording_resource.js','/recording_limits.js':'recording_limits.js','/classroom_recorder.js':'classroom_recorder.js','/teacher':'teacher.html','/teacher_page.js':'teacher_page.js','/':'index.html' ,'/app.js':'app.js','/web_i18n.js':'web_i18n.js','/locales.js':'locales.js','/public_content.js':'public_content.js','/diagnostics.js':'diagnostics.js','/studio_time.js':'studio_time.js','/classroom.js':'classroom.js','/style.css':'style.css','/favicon.svg':'favicon.svg'}
         if path not in files and path in ('/booking','/login','/signup','/account','/classroom','/resources','/messages','/join'): path='/'
         need(path in files,'Page not found.',404)
         f=ROOT/files[path]; mime=mimetypes.guess_type(f.name)[0] or 'application/octet-stream'
@@ -1429,7 +1478,20 @@ class Handler(BaseHTTPRequestHandler):
         self.send(data,mime=mime+'; charset=utf-8')
 
     def post_api(self,d):
+        import student_auth
         path=self.path_only
+        if path=='/api/policies/ack':
+            self.require_user();import policy_service
+            return policy_service.acknowledge(RECORDING_STORE.features,self.user['id'],d,APIError)
+        if path=='/api/account/recording-authorization':
+            self.require_user();need(self.user['role']=='student','Student account required.',403)
+            from recording_authorization import agree
+            result=agree(RECORDING_STORE.features,self.user['id'],d,APIError)
+            if d.get('action')=='withdraw':
+                with LOCK:
+                    for room in ROOMS.values():
+                        if any(p['uid']==self.user['id'] for p in room['peers'].values()):RECORDING_STORE.stop(room)
+            return result
         if path.startswith('/api/admin/recordings/'):
             self.require_user(True)
             if path=='/api/admin/recordings/handoff':
@@ -1439,13 +1501,24 @@ class Handler(BaseHTTPRequestHandler):
                     need(len(RECORDING_HANDOFFS)<256,'Too many recording links.',429)
                     token=secrets.token_urlsafe(32)
                     record_id=d.get('id','');RECORDING_STORE.row(record_id,self.user['id'])
-                    RECORDING_HANDOFFS[token]={**token_claims(self.user,self.sid),'expires':time.time()+60,'record_id':record_id,'download':d.get('download') is True}
+                    RECORDING_HANDOFFS[token]={**token_claims(self.user,self.sid),'expires':time.time()+60,'record_id':record_id,'download':d.get('download') is True,'manage':d.get('manage') is True}
                 return {'url':'/teacher-recordings-login?token='+quote(token)}
             record_id=d.get('id','');row=RECORDING_STORE.row(record_id,self.user['id'])
+            if path=='/api/admin/recordings/roster':return RECORDING_SHARING.roster(row)
+            if path=='/api/admin/recordings/verify-absence':return RECORDING_SHARING.verify_absent(row,self.user['id'],d.get('user_id'),d.get('confirmed'))
+            if path=='/api/admin/recordings/share':return RECORDING_SHARING.create(row,self.user['id'],d.get('viewers'),d.get('expires'),d.get('download',False))
+            if path=='/api/admin/recordings/grants':return RECORDING_SHARING.grants(row)
+            if path=='/api/admin/recordings/revoke':return RECORDING_SHARING.revoke(row,self.user['id'],d.get('grant_id'))
+            if path=='/api/admin/recordings/local-checkpoint':return RECORDING_STORE.local_checkpoint(record_id,self.user['id'],d.get('sequence'),d.get('size'),d.get('digest'))
+            if path=='/api/admin/recordings/local-manifest':return RECORDING_STORE.local_manifest(record_id,self.user['id'])
+            if path=='/api/admin/recordings/import':return RECORDING_STORE.import_local(record_id,self.user['id'])
             if path=='/api/admin/recordings/finish':
-                return RECORDING_STORE.finalize(record_id,self.user['id'],d.get('complete'),d.get('duration',0))
+                result=RECORDING_STORE.finalize(record_id,self.user['id'],d.get('complete'),d.get('duration',0))
+                metrics=d.get('metrics',{});need(isinstance(metrics,dict) and len(json.dumps(metrics))<=4096,'Invalid recording metrics.')
+                with RECORDING_STORE.features.db() as c:c.execute('UPDATE recording_options SET metrics=?,stop_reason=? WHERE id=?',(json.dumps(metrics),str(d.get('stop_reason',''))[:40],record_id))
+                return result
             if path=='/api/admin/recordings/delete':
-                RECORDING_STORE.delete(record_id,self.user['id']);return {'ok':True}
+                return RECORDING_STORE.request_delete(record_id,self.user['id'])
             if path=='/api/admin/recordings/access':
                 need(row['state']=='ready' and row['expires']>time.time(),'Recording is not ready.',409)
                 tickets=self.session.setdefault('recording_tickets',{})
@@ -1477,7 +1550,7 @@ class Handler(BaseHTTPRequestHandler):
                     uid=r.lastrowid
                     c.execute("INSERT OR REPLACE INTO settings VALUES ('owner_initialized','1')")
                 owner_auth.PAIRING.consume()
-                self.rotate(uid)
+            self.rotate(uid)
             with db() as c:u=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
             return {'user':public_user(u),'csrf':self.session['csrf']}
         if path=='/api/desktop/remember':
@@ -1550,22 +1623,42 @@ class Handler(BaseHTTPRequestHandler):
             self.limit_auth(username,signup=path=='/api/signup')
             password=d.get('password',''); need(isinstance(password,str) and 1<=len(password)<=256,'Invalid password.')
             if path=='/api/signup':
+                import policy_service
+                policy_service.validate(d,APIError)
                 need(len(password)>=12,'Use at least 12 characters for your password.')
                 name=field(d,'name',1,80)
                 with db() as c:
                     try: r=c.execute("INSERT INTO users(username,name,password,role) VALUES (?,?,?,'student')",(username,name,hash_password(password)))
                     except sqlite3.IntegrityError: raise APIError('That username is already in use.',409)
                     uid=r.lastrowid
+                    policy_service.registration(c,RECORDING_STORE.features,uid)
             else:
                 with db() as c: u=c.execute('SELECT * FROM users WHERE username=?',(username,)).fetchone()
                 need(u and check_password(u['password'],password),'Incorrect username or password.',401)
                 uid=u['id']
+            prior=self.session.get('student_persistent')
+            if prior:student_auth.revoke(RECORDING_STORE.features,prior)
             self.rotate(uid)
             with db() as c:
                 c.execute('DELETE FROM attempts WHERE ip=?',('auth-account:'+username,))
                 u=c.execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
+            if d.get('remember_me') is True:
+                need(u['role']=='student','Student Remember Me cannot be used for teacher accounts.',400)
+                token,selector=student_auth.issue(RECORDING_STORE.features,u);self.session['student_persistent']=selector;self.student_cookie=student_auth.cookie(token)
+            elif d.get('remember_me') is not None:self.student_cookie=student_auth.cookie('',0)
             return {'user':public_user(u),'csrf':self.session['csrf']}
         if path=='/api/logout':
+            import student_auth
+            if self.session.get('student_persistent'):student_auth.revoke(RECORDING_STORE.features,self.session['student_persistent'])
+            # Revoke a valid remember cookie even if the ordinary session already expired.
+            from http.cookies import SimpleCookie
+            persistent=SimpleCookie()
+            try:persistent.load(self.headers.get('Cookie',''))
+            except CookieError:pass
+            if student_auth.COOKIE in persistent:
+                token=persistent[student_auth.COOKIE].value
+                if re.fullmatch(r'[0-9a-f]{32}\.[A-Za-z0-9_-]{43}',token):student_auth.revoke(RECORDING_STORE.features,token.split('.')[0])
+            self.student_cookie=student_auth.cookie('',0)
             if self.session.get('remember_id'):
                 with db() as c:c.execute('DELETE FROM desktop_credentials WHERE selector=?',(self.session['remember_id'],))
             with LOCK:
@@ -1576,6 +1669,12 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/resources/redeem':
             self.limit_resource_code()
             code=normalize_resource_code(d.get('code',''))
+            if len(code)==20:
+                bundle=RECORDING_SHARING.redeem(code,self.user);need(bundle,'Recording resource unavailable.',404)
+                grant=secrets.token_urlsafe(32)
+                with LOCK:
+                    clean_resource_grants();RESOURCE_GRANTS[grant]={'type':'recording','code_hash':bundle.pop('code_hash'),'session':self.sid,'expires':time.time()+1800}
+                return {**bundle,'grant':grant,'expires_in':1800}
             with db() as c:
                 row=c.execute('SELECT * FROM resource_codes WHERE code=? AND active=1',(code,)).fetchone()
                 need(row,'That access code was not found or is no longer active.',404)
@@ -1989,19 +2088,23 @@ class Handler(BaseHTTPRequestHandler):
                     need(len(room['peers'])<6,'This small-group room is full (maximum 6 connected participants).',409)
                     peer=secrets.token_hex(16)
                     room['peers'][peer]={'uid':self.user['id'],'name':self.user['name'],'role':self.user['role'],'session':self.sid,'seen':time.time(),'mic_on':False,'camera_on':False,'forced_mute':False}
+                    RECORDING_SHARING.present(cid,self.user)
                     return {'peer':peer,'iceServers':servers,'relayConfigured':relay_configured,
                             'relayProvider':relay_provider,'relayError':relay_error}
                 peer=d.get('peer'); self.owned_peer(room,peer)
                 if path.startswith('/api/room/recording-'):
                     action=path.rsplit('-',1)[-1]
                     if action=='request':
-                        self.require_user(True);return RECORDING_STORE.request(room,peer,d.get('consent'))
+                        self.require_user(True)
+                        if d.get('sharing'):need(self.room_access(cid)['class_kind'] in ('individual','group'),'Quick Meetings cannot authorize absentee sharing.',403)
+                        return RECORDING_STORE.request(room,peer,d.get('consent'),d.get('mode','cloud'),d.get('sharing',False),d.get('download',False),d.get('future_upload',False))
                     if action=='consent':return RECORDING_STORE.consent(room,peer,d.get('id'),d.get('accepted'))
                     if action=='withdraw':
                         rec=room.get('recording');need(rec and rec['id']==d.get('id'),'Recording request expired.',409)
                         RECORDING_STORE.stop(room);return RECORDING_STORE.status(room,peer)
                     need(self.user['role']=='admin','Teacher access required.',403)
-                    if action=='start':return RECORDING_STORE.start(room,peer,self.user['id'],cid,d.get('mime'))
+                    if action=='start':
+                        return RECORDING_STORE.start(room,peer,self.user['id'],cid,d.get('mime'))
                     if action=='heartbeat':return RECORDING_STORE.heartbeat(room,peer,d.get('id'))
                     if action in ('pause','resume'):return RECORDING_STORE.pause(room,peer,action=='pause')
                     if action=='stop':

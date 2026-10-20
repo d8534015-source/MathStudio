@@ -2,9 +2,9 @@
   #error BuildRoot must be supplied by the reviewed build script
 #endif
 #ifdef ReviewBuild
-  #define ProductName "MathStudio Classroom Review"
-  #define ProductId "{{F71417CF-FD5B-4FC7-9CC3-45E225EF14B5}"
-  #define InstallerName "MathStudio-Classroom-Review"
+  #define ProductName "MathStudio Recording Upgrade Review"
+  #define ProductId "{{D7F3B29E-E2F1-41DA-B520-EA2E1F01B411}"
+  #define InstallerName "MathStudio-Recording-Upgrade-Review"
 #else
   #define ProductName "MathStudio"
   #define ProductId "{{E5935B86-2D46-45F3-8B46-E7A922F8A513}"
@@ -44,7 +44,7 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.i
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "{#SourcePath}\..\..\CLASSROOM_REVIEW.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\..\..\RECORDING_UPGRADE_REVIEW.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildRoot}\dist\MathStudioClient\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

@@ -88,11 +88,11 @@ class RecordingTests(BackendCase):
         with path.open('ab') as file:file.write(b'uncommitted crash tail')
         out=self.request('/api/admin/recordings/finish',{'id':rid,'complete':True,'duration':123},t)
         self.assertEqual(out[0],200,out)
-        self.assertEqual(out[1]['state'],'uploading')
+        self.assertEqual(out[1]['state'],'processing')
         self.assertEqual(path.with_suffix('.webm').read_bytes(),first+b'end')
         self.assertEqual(self.chunk(rid,t,b'late',2)[0],409)
         listed=self.request('/api/admin/recordings',state=t)[1]['recordings'][0]
-        self.assertEqual(listed['duration'],123);self.assertEqual(listed['state'],'uploading')
+        self.assertEqual(listed['duration'],123);self.assertEqual(listed['state'],'processing')
         self.assertEqual(self.request('/api/admin/recordings/access',{'id':rid},t)[0],409)
         self.app.RECORDING_STORE.delete(rid,self.uid('teacher'));self.cloud.remove.assert_called_once()
         self.assertFalse(path.with_suffix('.webm').exists())

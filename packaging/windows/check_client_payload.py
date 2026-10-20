@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import re
 
-FORBIDDEN={'classroom_recording','recording_cloud','server','owner_auth','owner_review','website_content','public_translations','argos_runtime','argos_worker','argos_setup',
+FORBIDDEN={'review_features','recording_resources','recording_authorization','guardian_authorization','recording_media','policy_service','student_auth','classroom_recording','recording_cloud','server','owner_auth','owner_review','website_content','public_translations','argos_runtime','argos_worker','argos_setup',
     'diagnose_argos','verify_argos_models','argostranslate','minisbd','sentencepiece','ctranslate2',
     'onnxruntime','onnx','torch','stanza','spacy','transformers','runtime_setup','owner_launcher','document_worker'}
 

@@ -34,6 +34,9 @@ class Integration(unittest.TestCase):
     def client(self):
         state={'cookie':'','csrf':''}
         def request(path,data=None,csrf=True):
+            if path=='/api/signup' and data is not None:
+                import policy_service
+                data={**data,'policy_version':policy_service.metadata()['version'],'accept_terms':True,'ack_privacy':True,'ack_cookies':True}
             conn=http.client.HTTPConnection('127.0.0.1',self.http.server_port,timeout=10)
             headers={'Cookie':state['cookie']}
             if data is not None:
