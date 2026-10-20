@@ -55,9 +55,14 @@ class Win32InputTests(unittest.TestCase):
             surface=tk.Toplevel(root);surface.overrideredirect(True);surface.geometry('700x500+0+0');surface.attributes('-topmost',True);surface.attributes('-alpha',.01)
             canvas=tk.Canvas(surface);canvas.pack(fill='both',expand=True);root.update()
             u=native.user32;u.WindowFromPoint.argtypes=[wintypes.POINT];u.WindowFromPoint.restype=wintypes.HWND
+            u.GetWindowRect.argtypes=[wintypes.HWND,ctypes.POINTER(wintypes.RECT)];u.GetWindowRect.restype=wintypes.BOOL
+            def control_point(widget):
+                rect=wintypes.RECT();self.assertTrue(u.GetWindowRect(widget.winfo_id(),ctypes.byref(rect)))
+                self.assertGreater(rect.right,rect.left);self.assertGreater(rect.bottom,rect.top)
+                return wintypes.POINT((rect.left+rect.right)//2,(rect.top+rect.bottom)//2)
             root_hwnd=u.GetAncestor(root.winfo_id(),native.GA_ROOT);input_hwnd=u.GetAncestor(surface.winfo_id(),native.GA_ROOT)
             def hit():
-                p=wintypes.POINT(root.winfo_rootx()+40,root.winfo_rooty()+70)
+                p=control_point(button)
                 hwnd=u.WindowFromPoint(p);return u.GetAncestor(hwnd,native.GA_ROOT)
             surface.lift();root.update()
             self.assertEqual(hit(),input_hwnd,'Baseline fullscreen input captures control coordinates when raised')
@@ -71,7 +76,7 @@ class Win32InputTests(unittest.TestCase):
             panel=tk.Toplevel(root);panel.transient(root);panel.geometry('150x100+450+40')
             panel_button=tk.Button(panel,text='Stop recording');panel_button.pack(fill='both',expand=True)
             panel.update();self.assertTrue(app.protect_controls());surface.lift();root.update()
-            point=wintypes.POINT(panel_button.winfo_rootx()+20,panel_button.winfo_rooty()+20)
+            point=control_point(panel_button)
             # Check the native region separately from Z-order/hit-test delivery.
             gdi=ctypes.windll.gdi32
             u.GetWindowRgn.argtypes=[wintypes.HWND,wintypes.HRGN];u.GetWindowRgn.restype=ctypes.c_int
