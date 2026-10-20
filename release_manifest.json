@@ -2,17 +2,17 @@
   "schema": 1,
   "version": {
     "version": "41.6.6",
-    "build_id": "v41.6.6-recording-upgrade-review1",
-    "asset_version": "41_6_6_recording_upgrade1"
+    "build_id": "v41.6.6-stop-input-review1",
+    "asset_version": "41_6_6_stop_input1"
   },
-  "parent_commit": "416438d798362234ce821e5e17e6b65d0275e3f2",
-  "status": "Recording/resources/policies review stacked on PR10. Draft legal content and manual acceptance gates remain; no deployment.",
+  "parent_commit": "336d744c0680183832ac499ddaa4a1e93ea47721",
+  "status": "Stop/finalization and native input/shutdown repair review stacked on PR11. Physical Windows11 acceptance required; no deployment.",
   "folders": {
-    "owner": "MathStudio_v41_6_6_OWNER_Recording_Upgrade_Review",
-    "teacher": "MathStudio_v41_6_6_TEACHER_Recording_Upgrade_Review"
+    "owner": "MathStudio_v41_6_6_OWNER_Stop_Input_Review",
+    "teacher": "MathStudio_v41_6_6_TEACHER_Stop_Input_Review"
   },
   "runtime": {
-    "python": "CPython x64 3.12–3.14; Cloud-tested 3.12.14 Linux only",
+    "python": "CPython 3.13 x64; final Linux/Windows CI results in the delivery verification report",
     "dependencies": {
       "Pillow": "12.3.0",
       "pypdf": "6.20.1",
@@ -79,7 +79,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "71023460bb14fbd46ddab7d3c7b261f3594aeb4a2077896a59adb340cd08d184"
+      "sha256": "aef0ced1c043c9983ce715c3741b3723ce83ff4d4ea942d28bcbcd20b3e716db"
     },
     "OPEN MATHSTUDIO TEACHER.bat": {
       "packages": [
@@ -198,7 +198,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "9770e93bbea8e2bc5143799cdaa6a80437a8076f7a66d7f02110766e939cb3b9"
+      "sha256": "f032a205ee3524f1395e355e0ce803347eb21997dcff8a98cc678f725c84fb42"
     },
     "cloud_storage.example.bat": {
       "packages": [
@@ -280,7 +280,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "a463ac8dadccaf3a3cd2a9f7f3b76f70bba7e529ed71e27316f47798116a028e"
+      "sha256": "e83ccbdd8fd880bcea833596072eb4fb1559dadd49d99e648c5a57720193d484"
     },
     "runtime_setup.py": {
       "packages": [
@@ -293,7 +293,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "bf8ebd73af4944d34aa71177e7ff1ba2f51907df6e99597339b89ac40d4e8692"
+      "sha256": "e482ea70be0ddad3750dbf2848fa7a9d800c503b9394bc936bff4bdbaed21e59"
     },
     "setup_free_media.ps1": {
       "packages": [
@@ -365,14 +365,14 @@
         "owner",
         "teacher"
       ],
-      "sha256": "f2ead527e10a15382da0a29e0b563f6becbb269156641031c71a395c92cc31f2"
+      "sha256": "b0ff5344a165fdbe3caa8c4d071cb6edbd09df6caf8fc1eefd6a6e8d0c0b3cbe"
     },
     "teacher_meeting_app.py": {
       "packages": [
         "owner",
         "teacher"
       ],
-      "sha256": "23c36ea9ca5829605e1fa691adc34a50ac77a78cebc123a12d82836900d572fb"
+      "sha256": "3fbd8a427620e085378a35f2a36a821d52333425ea704021d41572cb86f66f9f"
     },
     "teacher_package_role.json": {
       "packages": [
@@ -431,7 +431,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "6855015fb4824590d3953029228923410b842c72365c4a7ebdd26ca42136ccab"
+      "sha256": "71185277ec04adcb9a6c3bfea4b3ddbee613c2572b2adec1f4e844ec658d9256"
     },
     "owner_launcher.py": {
       "packages": [
@@ -455,7 +455,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "ebf9be8fdf84740e90dc9d376e54ed04c324f943dbb7b7c3024d12463506490a"
+      "sha256": "5b05d06a4b5fb599400049f89e888d4d45bfcc7c8842c59c34462e46756f25d0"
     },
     "packaging/windows/MathStudio.spec": {
       "packages": [
@@ -467,7 +467,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "2fd8927d62c49f0475c6a243cf162aa5377c53a2a77ffe4c84058979d68459d8"
+      "sha256": "ea5a5e48e5cccbd6622cfee0e6f81491041f450c9d36a94600d3c993114b6a7f"
     },
     "packaging/windows/requirements-build.txt": {
       "packages": [
@@ -479,7 +479,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "6fca2a9b5092ba62fdfad2563d18f9ccd28495fd00f240dc78719a227eaf27e4"
+      "sha256": "50321d785d49133c802cb77f816b1c295b04613c2481a11b353f77a765a1f230"
     },
     "packaging/windows/README.md": {
       "packages": [
@@ -491,7 +491,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "6663c846e22454fc9c58577d069661b6023e6544f72aa0cbe3716b266deaf9d5"
+      "sha256": "26768e0a48f5695d98f0d67c31bcf1b1be2090cf6e9d6a2921d980b4752b7207"
     },
     "packaging/windows/check_owner_cleanup.py": {
       "packages": [
@@ -721,13 +721,13 @@
       "packages": [
         "owner"
       ],
-      "sha256": "c989b0ec7682f844c1e5d68c54575b5102ca16614d4385b8c1287749e6648646"
+      "sha256": "2e548286678af5ad5eca9bde590a681566ea6b63145dcc0d9f247b0feab4fe38"
     },
     "test_owner_review.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "2e9365f77015f1778aff703e7773d979bfe5007ca69210b58a39e958b9da2f94"
+      "sha256": "c0940c10811d6e45c57e8ecd8f1973d2132839dd73bf96734d9f666c9f3ffbda"
     },
     "REVIEW OWNER SETUP.bat": {
       "packages": [
@@ -745,7 +745,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "d2727c2dbd477b151c825850fec6da930746879a183958259c17d1f2b6ee57ab"
+      "sha256": "06853513ac237895e0a7a94375e1434d671c205d0e2c2b56db1ebb26ce8a5d57"
     },
     "owner_auth.py": {
       "packages": [
@@ -777,7 +777,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "3c24bec67b4860e9cfdb612b4eab72d35e5b490f917a56d37029e524c1332dbb"
+      "sha256": "009952a2af9e60e0222c49a8cade0a7270d24881f026db813907935e32dfdb6e"
     },
     "annotation_pipeline.py": {
       "packages": [
@@ -791,19 +791,19 @@
         "owner",
         "teacher"
       ],
-      "sha256": "e100a37601507fcd3677683c8e9406b58269360e72da0e162516e071b7bd7d75"
+      "sha256": "03ba34fc53113505a26436105127c648fc518b55791c989bf0897de4e3a2df18"
     },
     "classroom_recorder.js": {
       "packages": [
         "owner"
       ],
-      "sha256": "802b187e208a06261427d3ca07f34446579b8ba54509610187e1545baf743ff1"
+      "sha256": "7d5c73870a8bb2ef48a00a320260cda4821d2a1609ea197bc55b93f4353d51ff"
     },
     "classroom_recording.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "3d64542e872a0316103b17d7dc58c39c840ce47f19709da0324c010b9c887444"
+      "sha256": "a772865489823088ecfb0a8f3b3832f79eec6a4f0dd59e8cdc7c79c1b0dec013"
     },
     "recording_cloud.py": {
       "packages": [
@@ -821,7 +821,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "0ba1ba47718ac07a5a7ff63b10d5eb1159fa47b2de51514f96f228e952f77fbd"
+      "sha256": "a5a1d5352c297ed35eaa077936db818a1c59d68d21db219cb5d83b731f2f0853"
     },
     "test_classroom_drawing.py": {
       "packages": [
@@ -882,7 +882,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "82c64db5417fbba998b9a39a7be65d130146b2db03dd88ac4657536d28031e83"
+      "sha256": "c80aa18eab274023e7618cd4f1e1e1d6a1034827cc694b4b647eb488aa0fcc87"
     },
     "policy_service.py": {
       "packages": [
@@ -930,7 +930,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "009f3603b58f24cb5ee748fa2265b12a7bf5e2329e3ad74ed905c1e12d43d43c"
+      "sha256": "8f072e9e44bd563bb41d3414ef6bbef94ca1f550fc0a346d371d0d11ab9c6c18"
     },
     "test_recording_sharing.py": {
       "packages": [
@@ -997,13 +997,45 @@
         "owner"
       ],
       "sha256": "2bb171effe5c8bd0d10ae47bf20e215504009d607276098b2d866c73840716cf"
+    },
+    "native_input.py": {
+      "packages": [
+        "owner",
+        "teacher"
+      ],
+      "sha256": "69344299b486503ebc414b7cc01e76e5a103a78634ac29b88001d38f3ca185ae"
+    },
+    "STOP_INPUT_REVIEW.md": {
+      "packages": [
+        "owner",
+        "teacher"
+      ],
+      "sha256": "0e8d42baac4b67b8c2e6c32b663cc8ed70e5d500a9560e80a8fc5fdf8dbc3de7"
+    },
+    "test_recording_stop.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "ec67647600f22e6fa9ee653027591415b7022dfbc76e818ccac2648035ab3757"
+    },
+    "test_native_input_shutdown.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "b4f9d4d7f1f57b2fefd60947ebac0359ae57d15df1752f8427948cf2760d7c97"
+    },
+    "test_recording_stop_browser.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "e4155cb73e3f62763a1d1b4485ee703aea0650efc59dbd357a04127d8aeab544"
     }
   },
   "owner_review": {
-    "base_source_commit": "416438d798362234ce821e5e17e6b65d0275e3f2",
+    "base_source_commit": "336d744c0680183832ac499ddaa4a1e93ea47721",
     "inherits_pr8": "cd09b99483abf1c2260bcf9c91183280df1b4f4b",
-    "instructions": "RECORDING_UPGRADE_REVIEW.md",
-    "launch_port": 5063,
+    "instructions": "STOP_INPUT_REVIEW.md",
+    "launch_port": 5065,
     "binding": "127.0.0.1",
     "tunnel": "Official cloudflared owned Quick Tunnel",
     "models": "Local copy of existing ready runtime/packages; not bundled or downloaded"

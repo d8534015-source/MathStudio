@@ -1,6 +1,6 @@
 # Recording upgrade review candidate
 
-For this candidate read `RECORDING_UPGRADE_REVIEW.md` first. Its OWNER port/profile, teacher installer AppID/profile, policy/legal draft gates and optional trusted FFmpeg setup differ from the historical general instructions below. Earlier PR9/PR10 and production installs remain separate.
+For this candidate read `STOP_INPUT_REVIEW.md` first. Its OWNER port/profile, teacher installer AppID/profile, policy/legal draft gates and optional trusted FFmpeg setup differ from the historical general instructions below. Earlier PR9/PR10 and production installs remain separate.
 
 # Windows installer development
 

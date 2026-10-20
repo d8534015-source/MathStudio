@@ -1,7 +1,7 @@
 name: Windows teacher installer
 on:
   pull_request:
-    branches: ['codex/delivery-v4166', 'codex/argos-offline-v4166', 'codex/teacher-website-management-v4166', 'codex/classroom-recording-pen-v4166']
+    branches: ['codex/delivery-v4166', 'codex/argos-offline-v4166', 'codex/teacher-website-management-v4166', 'codex/classroom-recording-pen-v4166', 'codex/recording-resources-policies-v4166']
     paths:
       - '**.py'
       - 'requirements.txt'

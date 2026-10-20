@@ -28,6 +28,7 @@ from urllib.request import Request, urlopen
 import uuid
 import webbrowser
 from annotation_pipeline import BoardQueue
+from native_input import exclude_windows
 
 if sys.platform != "win32":
     raise SystemExit("MathStudio Teacher Meeting App currently supports Windows only.")
@@ -53,6 +54,8 @@ user32 = ctypes.windll.user32
 # ctypes may treat HWND values as 32-bit integers and target the wrong window.
 user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
 user32.GetAncestor.restype = wintypes.HWND
+user32.SetWindowPos.argtypes=[wintypes.HWND,wintypes.HWND,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,wintypes.UINT]
+user32.SetWindowPos.restype=wintypes.BOOL
 user32.GetCapture.argtypes=[]
 user32.GetCapture.restype=wintypes.HWND
 user32.ReleaseCapture.argtypes=[]
@@ -145,6 +148,8 @@ class TeacherMeetingApp:
         self.screen_stop = threading.Event()
         self.media_helper_started = False
         self.media_command_busy = False
+        self.ending = False
+        self.region_pending = False
         self.auto_media = bool(auto_media)
         self.lang = read_language()
 
@@ -161,7 +166,10 @@ class TeacherMeetingApp:
         self.toolbar.protocol("WM_DELETE_WINDOW", self.on_close)
         self.toolbar.geometry("1260x176+24+24")
         self.toolbar.minsize(1040, 160)
-        self.toolbar.bind("<Escape>", lambda _e: self.set_mode(False))
+        self.toolbar.bind_all("<Escape>", lambda _e: self.set_mode(False))
+        self.toolbar.bind_all("<Alt-F4>", lambda _e: (self.on_close(), "break")[1])
+        for event in ("<Configure>", "<Map>", "<Unmap>"):
+            self.toolbar.bind_all(event, self.queue_input_region, add="+")
         self.toolbar.bind("<Control-z>", lambda _e: self.undo())
         # Bring the app to the foreground after Windows has created the native
         # window, and repeat after the overlay is created.
@@ -506,10 +514,41 @@ class TeacherMeetingApp:
     def _show_input_capture(self, show: bool):
         if not self.input_overlay: return
         if show:
-            self.input_overlay.deiconify(); self.input_overlay.lift()
+            if not self.protect_controls():return
+            self.input_overlay.deiconify(); self.input_overlay.lift(); self.queue_input_region()
             self.toolbar.lift(); self.toolbar.attributes("-topmost",True)
         else:
             self.input_overlay.withdraw()
+
+    def queue_input_region(self, event=None):
+        if self.closed or not self.draw_mode or self.region_pending:return
+        try:
+            if event is not None and event.widget.winfo_toplevel() in (self.overlay,self.input_overlay,self.share_overlay):return
+        except (tk.TclError,AttributeError):return
+        self.region_pending=True
+        self.root.after_idle(self.refresh_input_region)
+
+    def refresh_input_region(self):
+        self.region_pending=False
+        if not self.closed and self.draw_mode:self.protect_controls()
+
+    def protect_controls(self):
+        try:
+            controls=[]
+            def visit(widget):
+                if widget in (self.overlay,self.input_overlay,self.share_overlay):return
+                if isinstance(widget,(tk.Tk,tk.Toplevel)) and widget.winfo_ismapped():
+                    handle=widget.winfo_id();controls.append(user32.GetAncestor(handle,GA_ROOT) or handle)
+                for child in widget.winfo_children():visit(child)
+            visit(self.toolbar)
+            handle=self.input_overlay.winfo_id()
+            exclude_windows(user32.GetAncestor(handle,GA_ROOT) or handle,controls)
+            return True
+        except Exception:
+            # Never leave a fullscreen input window covering recovery controls.
+            self.input_overlay.withdraw();self.release_pointer();self.draw_mode=False
+            self.status_var.set(self.tr('Pen input protection failed. Interact mode restored.'))
+            return False
 
     def set_clickthrough(self, enabled: bool):
         if not self.overlay:
@@ -583,6 +622,7 @@ class TeacherMeetingApp:
             self.erase_at(x, y)
             return
         if self.tool == "text":
+            self.set_mode(False)
             text = simpledialog.askstring(self.tr('MathStudio annotation'), self.tr('Text or math symbols:'), parent=self.toolbar)
             if text and text.strip():
                 self.commit_shape({**self.new_shape("text"), "x": x, "y": y, "text": text.strip()[:300]})
@@ -856,15 +896,22 @@ class TeacherMeetingApp:
         # local server. The browser consumes it on the public origin, receives
         # the admin session cookie there, then redirects straight into this
         # classroom. The teacher never enters the student's 10-digit code.
-        try:
-            handoff=http_json(self.server+"/api/teacher-app/media-login-token","POST",{"token":self.token})
-            media_token=str(handoff.get("media_token") or "")
-            if not media_token:
-                raise RuntimeError("MathStudio did not return a teacher media token.")
-            url=f"{self.public_origin}/teacher-media-login?token={quote(media_token)}"
-        except Exception as ex:
-            self.status_var.set("Could not authenticate meeting window: "+str(ex))
-            return
+        if getattr(self,'media_launch_busy',False):return
+        self.media_launch_busy=True
+        def work():
+            try:
+                handoff=http_json(self.server+'/api/teacher-app/media-login-token','POST',{'token':self.token})
+                media_token=handoff.get('media_token')
+                if not isinstance(media_token,str) or not media_token:raise RuntimeError('Invalid handoff')
+                return f'{self.public_origin}/teacher-media-login?token={quote(media_token)}'
+            except Exception:return None
+        def done(url):
+            self.media_launch_busy=False
+            if url:self.open_media_url(url)
+            else:self.status_var.set(self.tr('Could not authenticate meeting window. Check OWNER connectivity.'))
+        threading.Thread(target=lambda:self.post_ui(done,work()),daemon=True).start()
+
+    def open_media_url(self,url):
         # Chrome app mode gives the teacher a clean camera/participant panel
         # without browser tabs/address bars. The one-time handoff above signs
         # this browser window in as the same admin automatically.
@@ -926,10 +973,19 @@ class TeacherMeetingApp:
         except Exception:
             messagebox.showerror(APP_NAME,self.tr('Screen sharing needs Pillow. Restart the Teacher App; its launcher will install it automatically.'),parent=self.toolbar)
             return
-        try:
-            http_json(self.server+"/api/teacher-app/screen","POST",{"token":self.token,"active":True})
-        except Exception as ex:
-            messagebox.showerror(APP_NAME,self.tr('Request failed.')+"\n\n"+str(ex),parent=self.toolbar); return
+        if getattr(self,'screen_start_busy',False):return
+        self.screen_start_busy=True
+        def work():
+            try:http_json(self.server+'/api/teacher-app/screen','POST',{'token':self.token,'active':True});return True
+            except Exception:return False
+        def done(ok):
+            self.screen_start_busy=False
+            if ok:self.begin_native_capture(ImageGrab,Image)
+            else:self.status_var.set(self.tr('Screen sharing request failed. Check OWNER connectivity.'))
+        threading.Thread(target=lambda:self.post_ui(done,work()),daemon=True).start()
+
+    def begin_native_capture(self,ImageGrab,Image):
+        if self.closed:return
         self.screen_sharing=True; self.screen_stop.clear(); self.open_share_indicator(); self.refresh_people()
         self.status_var.set("Sharing your desktop · students see this screen and the shared annotation layer")
         def capture_loop():
@@ -955,8 +1011,10 @@ class TeacherMeetingApp:
         if not self.screen_sharing:
             return
         self.screen_sharing=False; self.screen_stop.set()
-        try: http_json(self.server+"/api/teacher-app/screen","POST",{"token":self.token,"active":False})
-        except Exception: pass
+        def notify():
+            try:http_json(self.server+'/api/teacher-app/screen','POST',{'token':self.token,'active':False},timeout=5)
+            except Exception:pass
+        threading.Thread(target=notify,daemon=True).start()
         self.close_share_indicator(); self.refresh_people()
         self.status_var.set("Screen sharing stopped")
 
@@ -991,55 +1049,63 @@ class TeacherMeetingApp:
         self.share_overlay=None; self.share_canvas=None
 
     def end_class(self):
-        if not messagebox.askyesno(APP_NAME, self.tr('End this class for the teacher and all students?'), parent=self.toolbar):
-            return
-        self.end_btn.configure(state="disabled")
-        try:
-            http_json(self.server + "/api/teacher-app/end", "POST", {"token": self.token})
-        except Exception as ex:
-            self.end_btn.configure(state="normal")
-            messagebox.showerror(APP_NAME, self.tr('Request failed.')+"\n\n"+str(ex), parent=self.toolbar)
-            return
-        self.connected = False
-        self.status_var.set("Class ended.")
-        messagebox.showinfo(APP_NAME, self.tr('The classroom is now closed.'), parent=self.toolbar)
-        self.close(force=True)
+        self.set_mode(False)
+        if self.ending:return
+        if messagebox.askyesno(APP_NAME, self.tr('End this class for the teacher and all students?'), parent=self.toolbar):
+            self.request_end()
 
     def on_close(self):
+        self.set_mode(False)
         if getattr(self,'board_sync',None) and self.board_sync.pending:
             if not messagebox.askyesno(APP_NAME,self.tr('Annotations are not synced. Close and discard pending ink?'),parent=self.toolbar):return
+        if self.ending:
+            if messagebox.askyesno(APP_NAME,self.tr('Meeting-end confirmation is pending. Close locally now? The remote class may still be open.'),parent=self.toolbar):self.close(force=True)
+            return
         if self.connected:
-            choice = messagebox.askyesno(APP_NAME, self.tr('Exit this meeting?\n\nClosing the Teacher Meeting window will end the classroom for students and remove it from the active class list.'), parent=self.toolbar)
-            if not choice:
-                return
+            if messagebox.askyesno(APP_NAME, self.tr('Exit this meeting?\n\nClosing the Teacher Meeting window will end the classroom for students and remove it from the active class list.'), parent=self.toolbar):self.request_end()
+        else:self.close(force=True)
+
+    def request_end(self):
+        if self.ending or self.closed:return
+        self.ending=True;self.end_btn.configure(state='disabled')
+        self.status_var.set(self.tr('Ending classroom; waiting for recording finalization and server confirmation. Close app remains available.'))
+        # No Tk calls from the worker, including after(). Cancellation is owned.
+        def work():
+            deadline=time.monotonic()+120
             try:
-                http_json(self.server + "/api/teacher-app/end", "POST", {"token": self.token})
-            except Exception as ex:
-                if not messagebox.askyesno(APP_NAME, self.tr('MathStudio could not confirm that the class ended:\n\n') + str(ex) + self.tr('\n\nClose the app anyway?'), parent=self.toolbar):
-                    return
-        self.close(force=True)
+                while not self.ui_stopped.is_set():
+                    result=http_json(self.server+'/api/teacher-app/end','POST',{'token':self.token},timeout=8)
+                    if result.get('ok') is True:return ('ok',None)
+                    if not result.get('pending') or time.monotonic()>=deadline:raise RuntimeError('Meeting-end confirmation unavailable.')
+                    self.ui_stopped.wait(.5)  # Poll an explicit pending response, never the UI thread.
+                return ('cancelled',None)
+            except Exception:return ('err',None)
+        def done(result):
+            if self.closed:return
+            self.ending=False;self.end_btn.configure(state='normal')
+            if result[0]=='ok':
+                self.connected=False;self.status_var.set(self.tr('Class ended.'));self.close(force=True)
+            elif result[0]=='err':
+                self.status_var.set(self.tr('Could not confirm that the remote classroom ended.'))
+                if messagebox.askyesno(APP_NAME,self.tr('Could not confirm that the remote classroom ended. Close locally anyway?'),parent=self.toolbar):self.close(force=True)
+        threading.Thread(target=lambda:self.post_ui(done,work()),daemon=True).start()
 
     def close(self, force=False):
-        self.closed = True
-        self.ui_stopped.set()
-        self.release_pointer()
-        self.connected = False
-        self.screen_stop.set()
+        if self.closed:return
+        self.closed=True;self.ui_stopped.set();self.release_pointer();self.connected=False;self.screen_stop.set()
         if self.screen_sharing:
-            try: http_json(self.server+"/api/teacher-app/screen","POST",{"token":self.token,"active":False})
-            except Exception: pass
-        self.close_share_indicator()
-        try:
-            if self.overlay:
-                self.overlay.destroy()
-            if self.input_overlay:
-                self.input_overlay.destroy()
-        except Exception:
-            pass
-        try:
-            self.root.destroy()
-        except Exception:
-            pass
+            server,token=self.server,self.token
+            def notify():
+                try:http_json(server+'/api/teacher-app/screen','POST',{'token':token,'active':False},timeout=5)
+                except Exception:pass
+            threading.Thread(target=notify,daemon=True).start()
+        self.screen_sharing=False;self.close_share_indicator()
+        for window in (self.input_overlay,self.overlay):
+            try:
+                if window:window.destroy()
+            except tk.TclError:pass
+        try:self.root.destroy()
+        except tk.TclError:pass
 
     def run(self):
         self.root.mainloop()

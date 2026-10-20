@@ -24,6 +24,9 @@ class UpgradeTests(prior.RecordingTests.__bases__[0]):
         rid=request('request',{'consent':True,'mode':'local'})[1]['id']
         self.request('/api/room/recording-consent',{'class_id':cid,'peer':sp,'id':rid,'accepted':True},s)
         self.assertEqual(request('start',{'mime':'video/webm'})[0],200)
+        import hashlib
+        data=b'synthetic-local'
+        self.request('/api/admin/recordings/local-checkpoint',{'id':rid,'sequence':0,'size':len(data),'digest':hashlib.sha256(data).hexdigest()},t)
         self.assertEqual(self.request('/api/admin/recordings/finish',{'id':rid,'complete':True,'duration':10},t)[1]['state'],'local')
         self.cloud.upload.assert_not_called()
         self.assertEqual(self.request('/api/admin/recordings/import',{'id':rid},t)[0],403)

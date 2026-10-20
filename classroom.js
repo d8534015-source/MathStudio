@@ -433,7 +433,7 @@ export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,
   $('#allow')?.addEventListener('change',async()=>{try{await post('permissions',{drawing:$('#allow').checked});}catch(ex){toast(ex.message);}});
   $('#chatForm')?.addEventListener('submit',ev=>{ev.preventDefault();sendChat($('#chatInput').value);});
   $('#chatInput')?.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&!ev.shiftKey&&!ev.isComposing){ev.preventDefault();sendChat(ev.currentTarget.value);}});
-  $('#end')?.addEventListener('click',async()=>{if(!confirm(tr("ui.end_the_class_and_disconnect_everyone")))return;try{await api('/api/admin/class-action',{class_id:cid,action:'end'});await leave();location.href='/teacher';}catch(ex){toast(ex.message);}});
+  $('#end')?.addEventListener('click',async()=>{if(!confirm(tr("ui.end_the_class_and_disconnect_everyone")))return;try{await recorder.stop(true);await api('/api/admin/class-action',{class_id:cid,action:'end'});await leave();location.href='/teacher';}catch(ex){toast(ex.message);}});
 
   function remoteTile(person){
     const div=document.createElement('article');div.className='video-card';div.id='peer-'+person.id;
