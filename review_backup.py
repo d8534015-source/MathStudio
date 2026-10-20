@@ -4,6 +4,7 @@ Never runs automatically. Select review data explicitly. Backups contain private
 information and must be kept off Git, encrypted and access restricted by OWNER.
 """
 import argparse
+from contextlib import closing
 import hashlib
 import json
 from pathlib import Path
@@ -33,7 +34,7 @@ def copy_verified(source,destination,port=5063,restore=False):
     for name in ('posts.db','review-features.sqlite3'):
         path=destination/name
         if path.exists():
-            with sqlite3.connect(path) as c:
+            with closing(sqlite3.connect(path)) as c, c:
                 if c.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('Backup database integrity failed.')
                 if restore:
                     tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}

@@ -900,7 +900,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "218bb4084d5ce8c1d8fa95af6c76bf9380ceaee4445187d34b7907dc4ada3b49"
+      "sha256": "574abaa270925448ebd27b68f009bb77015a21b08744a3f5a3a39b375ec6ff75"
     },
     "recording_management.js": {
       "packages": [
@@ -930,7 +930,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "7a11ead0fe57a4a0658786b0d0e7efbd2ab15726264ef7d4811493bcd9778b91"
+      "sha256": "009f3603b58f24cb5ee748fa2265b12a7bf5e2329e3ad74ed905c1e12d43d43c"
     },
     "test_recording_sharing.py": {
       "packages": [

@@ -60,12 +60,19 @@ class UpgradeTests(prior.RecordingTests.__bases__[0]):
 
     def test_backup_restore_is_explicit_new_directory_and_revokes_access(self):
         import tempfile,sqlite3
+        from contextlib import closing
         from pathlib import Path
         from review_backup import copy_verified
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);source=root/'review';source.mkdir();db=source/'posts.db'
-            with sqlite3.connect(db) as c:c.execute('CREATE TABLE desktop_credentials(selector TEXT)');c.execute("INSERT INTO desktop_credentials VALUES ('synthetic')")
-            result=copy_verified(source,root/'backup',port=0);self.assertEqual(result['integrity'],'passed')
-            copy_verified(root/'backup',root/'restored',port=0,restore=True)
-            with sqlite3.connect(root/'restored'/'posts.db') as c:self.assertEqual(c.execute('SELECT COUNT(*) FROM desktop_credentials').fetchone()[0],0)
-            with sqlite3.connect(db) as c:self.assertEqual(c.execute('SELECT COUNT(*) FROM desktop_credentials').fetchone()[0],1)
+            with closing(sqlite3.connect(db)) as c, c:c.execute('CREATE TABLE desktop_credentials(selector TEXT)');c.execute("INSERT INTO desktop_credentials VALUES ('synthetic')")
+            closed=[];real_connect=sqlite3.connect
+            class TrackedConnection(sqlite3.Connection):
+                def close(self):
+                    closed.append(True);return super().close()
+            with mock.patch('review_backup.sqlite3.connect',side_effect=lambda *a,**kw:real_connect(*a,**kw,factory=TrackedConnection)):
+                result=copy_verified(source,root/'backup',port=0);self.assertEqual(result['integrity'],'passed')
+                copy_verified(root/'backup',root/'restored',port=0,restore=True)
+            self.assertEqual(len(closed),2,'Both verification connections must close without garbage collection')
+            with closing(sqlite3.connect(root/'restored'/'posts.db')) as c, c:self.assertEqual(c.execute('SELECT COUNT(*) FROM desktop_credentials').fetchone()[0],0)
+            with closing(sqlite3.connect(db)) as c, c:self.assertEqual(c.execute('SELECT COUNT(*) FROM desktop_credentials').fetchone()[0],1)
