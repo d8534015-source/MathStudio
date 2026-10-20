@@ -1,3 +1,7 @@
+# Recording upgrade review candidate
+
+For this candidate read `RECORDING_UPGRADE_REVIEW.md` first. Its OWNER port/profile, teacher installer AppID/profile, policy/legal draft gates and optional trusted FFmpeg setup differ from the historical general instructions below. Earlier PR9/PR10 and production installs remain separate.
+
 # Windows installer development
 
 For the bundled teacher installer **MathStudio.exe** (no separate Python or BAT launchers), see [installer instructions](packaging/windows/README.md). The source/OWNER instructions below apply only to source distributions. See the installer PR test report for actual Windows build status.

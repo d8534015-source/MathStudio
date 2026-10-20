@@ -17,7 +17,7 @@ class Recordings(ttk.Frame):
         for key,label in [('date','Date'),('meeting','Meeting'),('duration','Duration'),('state','Status')]:self.table.heading(key,text=tr(label))
         self.table.pack(fill='both',expand=True)
         bar=ttk.Frame(self);bar.pack(fill='x',pady=8)
-        for label,action in [('Refresh',self.reload),('Play',lambda:self.open(False)),('Download',lambda:self.open(True)),('Delete',self.delete)]:ttk.Button(bar,text=tr(label),command=action).pack(side='left',padx=4)
+        for label,action in [('Refresh',self.reload),('Play',lambda:self.open(False)),('Download',lambda:self.open(True)),('Manage sharing / upload',lambda:self.open(False,True)),('Delete',self.delete)]:ttk.Button(bar,text=tr(label),command=action).pack(side='left',padx=4)
         self.after(50,self.drain);self.reload()
 
     def task(self,fn,done):
@@ -32,7 +32,7 @@ class Recordings(ttk.Frame):
         if not self.winfo_exists():return
         try:
             done,result,error=self.results.get_nowait();self.busy=False
-            if error:self.status.config(text=error)
+            if error:self.status.config(text=self.tr(error))
             else:self.status.config(text=self.tr('Private cloud recordings'));done(result)
         except queue.Empty:pass
         self.after(50,self.drain)
@@ -49,14 +49,14 @@ class Recordings(ttk.Frame):
     def selected(self):
         items=self.table.selection();return self.rows.get(items[0]) if items else None
 
-    def open(self,download):
+    def open(self,download,manage=False):
         row=self.selected()
         if not row:return
-        if row['state']!='ready':self.status.config(text=self.tr('Recording is not ready.'));return
+        if not manage and row['state']!='ready':self.status.config(text=self.tr('Recording is not ready.'));return
         def show(result):
             from urllib.parse import urljoin
             webbrowser.open(urljoin(self.client.base+'/',result['url']))
-        self.task(lambda:self.client.json('/api/admin/recordings/handoff',{'id':row['id'],'download':download}),show)
+        self.task(lambda:self.client.json('/api/admin/recordings/handoff',{'id':row['id'],'download':download,'manage':manage}),show)
 
     def delete(self):
         row=self.selected()

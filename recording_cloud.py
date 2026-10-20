@@ -46,7 +46,7 @@ class R2:
     @staticmethod
     def key(record_id):return 'private-recordings/'+record_id
 
-    def upload(self,row,path,checkpoint):
+    def upload(self,row,path,checkpoint,complete=True,maximum=None,max_parts=None):
         """Resume using DB upload ID and ETags; at most one 8MiB part in memory."""
         import json
         key=self.key(row['id']);upload=row['upload_id'];parts=json.loads(row['parts'])
@@ -58,27 +58,33 @@ class R2:
         # A lost completion response can leave the object committed in R2 while
         # the durable metadata still says uploading. Verify it without replaying
         # an already-consumed multipart upload ID.
-        size=path.stat().st_size
-        if parts and len(parts)==(size+8*1024**2-1)//(8*1024**2):
+        size=min(path.stat().st_size,maximum) if maximum is not None else path.stat().st_size
+        if complete and parts and len(parts)==(size+8*1024**2-1)//(8*1024**2):
             try:
                 _,headers=self.request('HEAD',key)
                 length=next((v for k,v in headers.items() if k.lower()=='content-length'),None)
-                if length is not None and int(length)==size:return
+                if length is not None and int(length)==size:return True
             except RuntimeError:pass
-        with path.open('rb') as source:
-            source.seek(len(parts)*8*1024**2)
-            while True:
-                chunk=source.read(8*1024**2)
-                if not chunk:break
-                _,headers=self.request('PUT',key,chunk,{'partNumber':len(parts)+1,'uploadId':upload})
-                etag=next((v for k,v in headers.items() if k.lower()=='etag'),None)
-                if not etag:raise RuntimeError('Cloud part acknowledgment was invalid.')
-                parts.append(etag);checkpoint(upload,parts)
+        offset=len(parts)*8*1024**2;sent=0
+        while offset<size:
+            count=min(8*1024**2,size-offset)
+            if not complete and count<8*1024**2:break
+            # Close the file before network I/O; finalization may rename it on Windows.
+            with path.open('rb') as source:
+                source.seek(offset);chunk=source.read(count)
+            if len(chunk)!=count:raise RuntimeError('Committed recording bytes are unavailable.')
+            _,headers=self.request('PUT',key,chunk,{'partNumber':len(parts)+1,'uploadId':upload})
+            etag=next((v for k,v in headers.items() if k.lower()=='etag'),None)
+            if not etag:raise RuntimeError('Cloud part acknowledgment was invalid.')
+            parts.append(etag);checkpoint(upload,parts);offset+=count;sent+=1
+            if max_parts and sent>=max_parts and offset<size:return False
+        if not complete:return False
         root=ET.Element('CompleteMultipartUpload')
         for number,etag in enumerate(parts,1):
             part=ET.SubElement(root,'Part');ET.SubElement(part,'PartNumber').text=str(number);ET.SubElement(part,'ETag').text=etag
         data,_=self.request('POST',key,ET.tostring(root),{'uploadId':upload},headers={'Content-Type':'application/xml'})
         if ET.fromstring(data).tag.split('}')[-1]!='CompleteMultipartUploadResult':raise RuntimeError('Cloud finalization was not acknowledged.')
+        return True
 
     def remove(self,row):
         if row['upload_id'] and row['state']!='ready':self.request('DELETE',self.key(row['id']),query={'uploadId':row['upload_id']})

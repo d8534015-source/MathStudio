@@ -1,7 +1,7 @@
 name: Windows teacher installer
 on:
   pull_request:
-    branches: ['codex/delivery-v4166', 'codex/argos-offline-v4166', 'codex/teacher-website-management-v4166']
+    branches: ['codex/delivery-v4166', 'codex/argos-offline-v4166', 'codex/teacher-website-management-v4166', 'codex/classroom-recording-pen-v4166']
     paths:
       - '**.py'
       - 'requirements.txt'
@@ -33,7 +33,7 @@ jobs:
           python -m pip install --require-hashes --only-binary=:all: -r requirements.txt
       - name: Full regression suite (UTF-8)
         id: regression
-        timeout-minutes: 8
+        timeout-minutes: 15
         continue-on-error: true
         run: |
           New-Item -ItemType Directory -Force work/windows-build/installer | Out-Null

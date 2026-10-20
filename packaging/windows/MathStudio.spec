@@ -9,7 +9,7 @@ datas+=collect_data_files('tzdata')
 for package in ('Pillow','pypdf','tzdata'):datas+=copy_metadata(package)
 a=Analysis([str(root/'windows_teacher.py')],pathex=[str(root)],datas=datas,
     hiddenimports=['teacher_meeting_app','teacher_app_bootstrap','PIL.ImageGrab','PIL._imagingtk'],
-    excludes=['classroom_recording','recording_cloud','server','owner_auth','owner_review','website_content','public_translations','argos_runtime','argos_worker','argos_setup',
+    excludes=['review_features','recording_resources','recording_authorization','guardian_authorization','recording_media','policy_service','student_auth','classroom_recording','recording_cloud','server','owner_auth','owner_review','website_content','public_translations','argos_runtime','argos_worker','argos_setup',
               'argostranslate','minisbd','sentencepiece','ctranslate2','onnxruntime','torch','stanza','spacy',
               'document_worker','runtime_setup','owner_launcher','pytest','unittest'],
     noarchive=False)

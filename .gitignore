@@ -27,3 +27,7 @@ recordings/
 *.mp4
 *.part
 recording-policy.json
+
+# Private review policy/credential/checkpoint state.
+review-features.sqlite3*
+recording-processor.json
