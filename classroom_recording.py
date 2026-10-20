@@ -139,8 +139,8 @@ class Store:
             rec['phase']='stopped' if ack or rec['phase']=='pending' else 'stopping'
             if ack:
                 with self.record_lock(rec['id']):
-                    with self.db() as c:c.execute("UPDATE recordings SET state='finalizing' WHERE id=? AND state='capturing'",(rec['id'],))
-                    self.activity[rec['id']]=time.time()
+                    with self.db() as c:changed=c.execute("UPDATE recordings SET state='finalizing' WHERE id=? AND state='capturing'",(rec['id'],)).rowcount
+                    if changed:self.activity[rec['id']]=time.time()
 
     def defer_end(self,room):
         """Request a browser Stop before closing the room. Upload/indexing stays async."""
@@ -349,6 +349,7 @@ class Store:
         with self.record_lock(rid):
             row=self.row(rid,uid)
             self.require(row['mode']=='local' and row['state'] in ('capturing','finalizing'),'Local recording is not active.')
+            if row['state']=='finalizing':self.require(time.time()<self.activity.get(rid,row['created'])+120,'Recording finalization window expired.')
             self.require(type(sequence) is int and 0<=sequence<=15000 and type(size) is int and 0<size<=PART_BYTES and isinstance(digest,str) and re.fullmatch('[0-9a-f]{64}',digest),'Invalid local checkpoint.',400)
             with self.features.db() as c:
                 c.execute('BEGIN IMMEDIATE')

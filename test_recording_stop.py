@@ -39,6 +39,8 @@ class StopTests(BackendCase):
     def test_finalizing_expiry_stays_bounded_and_no_more_capture_is_authorized(self):
         t,s,cid,tp,sp,rid,action=self.active();store=self.app.RECORDING_STORE
         action('stop',{'ack':True});store.activity[rid]=time.time()-121
+        deadline_base=store.activity[rid];action('stop',{'ack':True})
+        self.assertEqual(store.activity[rid],deadline_base,'Repeated Stop cannot extend the drain window')
         self.assertEqual(self.chunk(rid,t)[0],409)
         self.assertEqual(action('heartbeat',{'id':rid})[0],403)
 
