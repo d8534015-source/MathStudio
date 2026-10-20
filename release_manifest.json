@@ -491,7 +491,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "19829e2b95a333dba7cb806f6258f915a8b92492fd1fae441fb01668b32c5a55"
+      "sha256": "6663c846e22454fc9c58577d069661b6023e6544f72aa0cbe3716b266deaf9d5"
     },
     "packaging/windows/check_owner_cleanup.py": {
       "packages": [
