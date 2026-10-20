@@ -77,6 +77,7 @@ class Store:
         self.require(room['peers'][peer]['role']=='admin','Teacher access required.',403)
         self.require(not room.get('recording') or room['recording']['phase'] in ('off','stopped'),'A recording request is already open.')
         self.require(mode in ('cloud','local') and all(type(v) is bool for v in (sharing,download,future_upload)),'Invalid recording options.',400)
+        self.require(not room.get('end_requested'),'Classroom is ending.')
         policy=self.policy(mode)
         scope={'storage':['local','cloud'] if mode=='local' and future_upload else [mode],'sharing':sharing,'download':download,'retention_days':policy['retention_days']}
         self.require(all(self.eligible(p,policy,scope) for p in room['peers'].values()),'Every student needs unexpired OWNER-recorded guardian authorization. Guests cannot be recorded.',403)
@@ -136,8 +137,25 @@ class Store:
         if rec:
             rec['block_until']=max(rec.get('block_until',0),rec.get('lease',0)+2)
             rec['phase']='stopped' if ack or rec['phase']=='pending' else 'stopping'
+            if ack:
+                with self.record_lock(rec['id']):
+                    with self.db() as c:changed=c.execute("UPDATE recordings SET state='finalizing' WHERE id=? AND state='capturing'",(rec['id'],)).rowcount
+                    if changed:self.activity[rec['id']]=time.time()
+
+    def defer_end(self,room):
+        """Request a browser Stop before closing the room. Upload/indexing stays async."""
+        rec=room.get('recording')
+        if not rec:return False
+        with self.db() as c:row=c.execute('SELECT state FROM recordings WHERE id=?',(rec['id'],)).fetchone()
+        if not row or row['state'] not in ('capturing','finalizing'):return False
+        if not room.get('end_requested'):
+            room['end_requested']=True
+            seq=room['teacher_command_seq']=room.get('teacher_command_seq',0)+1
+            room.setdefault('teacher_commands',[]).append({'seq':seq,'command':'record-stop','at':time.time()})
+        return True
 
     def before_join(self,room):
+        self.require(not room.get('end_requested'),'Classroom is ending.')
         rec=room.get('recording')
         if not rec:return
         if rec['phase']=='pending':self.stop(room,ack=True);return
@@ -153,8 +171,9 @@ class Store:
 
     def chunk(self,record_id,uid,sequence,data):
         with self.record_lock(record_id):
-            row=self.row(record_id,uid);self.require(row['state'] in ('capturing','importing'),'Recording is no longer accepting chunks.')
+            row=self.row(record_id,uid);self.require(row['state'] in ('capturing','finalizing','importing'),'Recording is no longer accepting chunks.')
             self.require(time.time()<min(json.loads(row['metrics']).get('imported_at',row['created'])+MAX_SECONDS+120,row['expires']),'Recording duration limit reached.')
+            if row['state']=='finalizing':self.require(time.time()<self.activity.get(record_id,row['created'])+120,'Recording finalization window expired.')
             digest=hashlib.sha256(data).hexdigest()
             if json.loads(row['metrics']).get('imported_at'):
                 with self.features.db() as c:original=c.execute('SELECT size,digest FROM local_chunks WHERE id=? AND sequence=?',(record_id,sequence)).fetchone()
@@ -171,17 +190,24 @@ class Store:
                 stream.truncate(row['bytes']);stream.write(data);stream.flush()
                 import os;os.fsync(stream.fileno())
             with self.db() as c:c.execute('UPDATE recordings SET bytes=?,sequence=?,last_hash=? WHERE id=?',(row['bytes']+len(data),sequence+1,digest,record_id))
+            if row['state']=='capturing':self.activity[record_id]=time.time()
             self.wake.set()
             return {'ok':True,'sequence':sequence+1}
 
     def finish(self,record_id,uid,complete):
         with self.record_lock(record_id):
             row=self.row(record_id,uid);source=self.folder/(record_id+'.part')
-            if row['state'] not in ('capturing','importing'):return {'ok':True,'state':row['state']}
+            if row['state'] not in ('capturing','finalizing','importing'):return {'ok':True,'state':row['state']}
             self.require(type(complete) is bool,'Invalid finalization.',400)
             if complete and json.loads(row['metrics']).get('imported_at'):
                 with self.features.db() as c:expected=c.execute('SELECT COALESCE(SUM(size),0) FROM local_chunks WHERE id=?',(record_id,)).fetchone()[0]
                 self.require(row['bytes']==expected and expected>0,'Local recording upload is incomplete.')
+            if row['mode']=='local':
+                with self.features.db() as c:total=c.execute('SELECT COALESCE(SUM(size),0) FROM local_chunks WHERE id=?',(record_id,)).fetchone()[0]
+            else:total=row['bytes']
+            if not total:
+                with self.features.db() as c:c.execute("UPDATE recording_options SET error='encoder:empty' WHERE id=?",(record_id,))
+            complete=complete and total>0
             state=('local' if complete else 'failed') if row['mode']=='local' else ('processing' if row['bytes'] else 'failed')
             if source.exists():
                 with source.open('r+b') as stream:stream.truncate(row['bytes'])
@@ -200,7 +226,7 @@ class Store:
     def _delete_locked(self,record_id,uid):
         with self.record_lock(record_id):
             row=self.row(record_id,uid)
-            self.require(row['state']!='capturing','Stop this recording before deleting it.')
+            self.require(row['state'] not in ('capturing','finalizing'),'Stop this recording before deleting it.')
             with self.db() as c:c.execute("UPDATE recordings SET state='deleting' WHERE id=?",(record_id,))
             if row['mode']=='cloud':
                 self.cloud.remove(row)
@@ -219,7 +245,7 @@ class Store:
         for item in expired:self.delete(item['id'],item['owner'],opportunistic=True)
 
     def recover(self):
-        with self.db() as c:rows=c.execute("SELECT id,owner FROM recordings WHERE state='capturing' AND created<?",(self.recovery_before,)).fetchall()
+        with self.db() as c:rows=c.execute("SELECT id,owner FROM recordings WHERE state IN ('capturing','finalizing') AND created<?",(self.recovery_before,)).fetchall()
         for row in rows:self.finish(row['id'],row['owner'],False)
         self.cleanup()
 
@@ -252,16 +278,16 @@ class Store:
                 self.wake.clear()
                 try:
                     self.cleanup()
-                    with self.db() as c:stale=c.execute("SELECT id,owner,created FROM recordings WHERE state='capturing'").fetchall()
+                    with self.db() as c:stale=c.execute("SELECT id,owner,created,state FROM recordings WHERE state IN ('capturing','finalizing')").fetchall()
                     for row in stale:
-                        if time.time()-self.activity.get(row['id'],row['created'])>60:self.finish(row['id'],row['owner'],False)
-                    with self.db() as c:rows=c.execute("SELECT * FROM recordings WHERE state IN ('capturing','importing','processing','uploading') AND bytes>0 AND expires>? ORDER BY created LIMIT 50",(time.time(),)).fetchall()
+                        if time.time()-self.activity.get(row['id'],row['created'])>(120 if row['state']=='finalizing' else 60):self.finish(row['id'],row['owner'],False)
+                    with self.db() as c:rows=c.execute("SELECT * FROM recordings WHERE state IN ('capturing','finalizing','importing','processing','uploading') AND bytes>0 AND expires>? ORDER BY created LIMIT 50",(time.time(),)).fetchall()
                     for item in rows:
                         if self.closed.is_set():break
                         with self.record_lock('cloud:'+item['id']):
                             row=self.row(item['id'],item['owner'])
                             if row['mode']!='cloud':continue
-                            complete=row['state'] not in ('capturing','importing')
+                            complete=row['state'] not in ('capturing','finalizing','importing')
                             if not complete and row['bytes']<PART_BYTES:continue
                             path=self.folder/(row['id']+('.part' if not complete else ('.mp4' if row['mime']=='video/mp4' else '.webm')))
                             def checkpoint(upload,parts):
@@ -271,10 +297,11 @@ class Store:
                                     with self.db() as c:c.execute("UPDATE recordings SET state='uploading' WHERE id=?",(row['id'],))
                                 acknowledged=self.cloud.upload(row,path,checkpoint,complete=complete,maximum=row['bytes'],max_parts=1)
                                 if complete and acknowledged:
-                                    with self.db() as c:c.execute("UPDATE recordings SET state='ready' WHERE id=?",(row['id'],))
-                                    self.activity.pop(row['id'],None)
                                     from recording_media import configured
-                                    if not configured(self.data):path.unlink(missing_ok=True)
+                                    indexed=configured(self.data)
+                                    with self.db() as c:c.execute('UPDATE recordings SET state=? WHERE id=?',('indexing' if indexed else 'ready',row['id']))
+                                    self.activity.pop(row['id'],None)
+                                    if not indexed:path.unlink(missing_ok=True)
                                 with self.features.db() as c:c.execute("UPDATE recording_options SET error='' WHERE id=?",(row['id'],))
                             except Exception:
                                 with self.features.db() as c:c.execute("UPDATE recording_options SET error='Private cloud transfer interrupted; retry pending.' WHERE id=?",(row['id'],))
@@ -287,13 +314,14 @@ class Store:
             from recording_media import configured,process
             while not self.closed.wait(2):
                 if not configured(self.data):continue
-                with self.db() as c:ready=c.execute("SELECT id,owner FROM recordings WHERE state='ready' AND expires>? LIMIT 50",(time.time(),)).fetchall()
+                with self.db() as c:ready=c.execute("SELECT id,owner FROM recordings WHERE state IN ('ready','indexing') AND expires>? LIMIT 50",(time.time(),)).fetchall()
                 for item in ready:
                     if self.closed.is_set():break
                     with self.record_lock('cloud:'+item['id']):
                         try:
                             row=self.row(item['id'],item['owner'])
-                            if row['state']=='ready':process(self,row)
+                            if row['state'] in ('ready','indexing') and process(self,row):
+                                with self.db() as c:c.execute("UPDATE recordings SET state='ready' WHERE id=? AND state='indexing'",(row['id'],))
                         except Exception:pass
         self.worker=threading.Thread(target=run,daemon=True);self.worker.start()
         self.processor=threading.Thread(target=processing,daemon=True);self.processor.start()
@@ -320,7 +348,8 @@ class Store:
     def local_checkpoint(self,rid,uid,sequence,size,digest):
         with self.record_lock(rid):
             row=self.row(rid,uid)
-            self.require(row['mode']=='local' and row['state']=='capturing','Local recording is not active.')
+            self.require(row['mode']=='local' and row['state'] in ('capturing','finalizing'),'Local recording is not active.')
+            if row['state']=='finalizing':self.require(time.time()<self.activity.get(rid,row['created'])+120,'Recording finalization window expired.')
             self.require(type(sequence) is int and 0<=sequence<=15000 and type(size) is int and 0<size<=PART_BYTES and isinstance(digest,str) and re.fullmatch('[0-9a-f]{64}',digest),'Invalid local checkpoint.',400)
             with self.features.db() as c:
                 c.execute('BEGIN IMMEDIATE')
@@ -339,7 +368,7 @@ class Store:
 
     def request_delete(self,rid,uid):
         with self.record_lock(rid):
-            row=self.row(rid,uid);self.require(row['state']!='capturing','Stop this recording before deleting it.')
+            row=self.row(rid,uid);self.require(row['state'] not in ('capturing','finalizing'),'Stop this recording before deleting it.')
             with self.db() as c:c.execute("UPDATE recordings SET state='deleting' WHERE id=?",(rid,))
         self.features.audit('delete_requested',uid,rid);self.wake.set()
         return {'ok':True,'state':'deleting'}

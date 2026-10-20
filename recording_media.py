@@ -37,7 +37,8 @@ def remux(executable,source,destination,mime,cancelled=None):
         finally:
             if process.poll() is None:process.kill();process.wait()
 
-        if result.returncode or not destination.is_file() or not 0<destination.stat().st_size<=MAX_BYTES+PART_BYTES:raise RuntimeError('Seekable playback indexing failed.')
+        if result.returncode:raise RuntimeError('FFmpeg indexing failed (exit='+str(int(result.returncode))+').')
+        if not destination.is_file() or not 0<destination.stat().st_size<=MAX_BYTES+PART_BYTES:raise RuntimeError('FFmpeg output validation failed.')
     except (OSError,subprocess.TimeoutExpired):raise RuntimeError('Seekable playback processor unavailable or timed out.') from None
 
 
@@ -51,6 +52,7 @@ def process(store,row):
         job=dict(c.execute('SELECT * FROM recording_playback WHERE id=?',(rid,)).fetchone())
     if job['state']=='ready':return True
     suffix='.mp4' if row['mime']=='video/mp4' else '.webm';source=store.folder/(rid+suffix);indexed=store.folder/(rid+'.indexed'+suffix)
+    stage='source'
     try:
         if not indexed.exists():
             import shutil
@@ -67,16 +69,22 @@ def process(store,row):
                         output.write(chunk)
                 if total!=row['bytes']:raise RuntimeError('Incomplete original recording transfer.')
             temporary=store.folder/(rid+'.indexing'+suffix)
+            stage='index'
             try:remux(executable,source,temporary,row['mime'],store.closed);temporary.replace(indexed)
             finally:temporary.unlink(missing_ok=True)
+        stage='playback-upload'
         def checkpoint(upload,parts):
             with feature.db() as c:c.execute('UPDATE recording_playback SET upload_id=?,parts=? WHERE id=?',(upload,json.dumps(parts),rid))
         if not store.cloud.upload({**row,'id':rid+'_playback','upload_id':job['upload_id'],'parts':job['parts']},indexed,checkpoint,max_parts=1):return False
         with feature.db() as c:c.execute("UPDATE recording_playback SET state='ready',bytes=? WHERE id=?",(indexed.stat().st_size,rid))
         source.unlink(missing_ok=True);indexed.unlink(missing_ok=True);return True
-    except Exception:
+    except Exception as error:
+        import re
+        code=type(error).__name__ if isinstance(error,(OSError,RuntimeError,ValueError)) else 'error'
+        match=re.fullmatch(r'FFmpeg indexing failed \(exit=(-?\d+)\)\.',str(error))
+        if match:code+=':exit='+match[1]
         with feature.db() as c:c.execute("UPDATE recording_playback SET state='failed' WHERE id=?",(rid,))
-        with feature.db() as c:c.execute("UPDATE recording_options SET error='Seekable playback processing pending. Check trusted FFmpeg, disk and R2.' WHERE id=?",(rid,))
+        with feature.db() as c:c.execute("UPDATE recording_options SET error=? WHERE id=?",('playback-'+stage+':'+code,rid))
         return False
 
 

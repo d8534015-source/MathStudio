@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $build = Join-Path $PSScriptRoot '..\..\work\windows-build'
-$installer = Join-Path $build 'installer\MathStudio-Recording-Upgrade-Review.exe'
+$installer = Join-Path $build 'installer\MathStudio-Stop-Input-Review.exe'
 $signature = Get-AuthenticodeSignature -LiteralPath $installer
 $report = [ordered]@{
     authenticode = [string]$signature.Status

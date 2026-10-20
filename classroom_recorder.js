@@ -7,6 +7,8 @@ export const TEXT={
   pause:['Pause','暂停'],resume:['Resume','继续'],stop:['Stop recording','停止录制'],agree:['I consent','我同意'],decline:['Decline / withdraw','拒绝／撤回同意'],
   off:['Recording is off.','未在录制。'],pending:['Recording requested; waiting for every participant’s consent.','已请求录制，正在等待所有参与者同意。'],
   active:['● Recording — enabled microphones, received cameras, shared screen and annotations.','● 正在录制：已启用麦克风、收到的摄像头画面、共享屏幕与批注。'],
+  finalizing:['Finalizing recording — collecting final chunks and waiting for acknowledgment…','正在完成录制：收集最后片段并等待确认…'],
+  empty:['No encoded media was produced. Check the recording diagnostics.','未产生已编码媒体，请检查录制诊断。'],
   paused:['Recording paused.','录制已暂停。'],stopping:['Recording stopping…','正在停止录制…'],stopped:['Recording stopped.','录制已停止。'],
   saved:['Recording queued for private cloud upload. Check Recordings for status.','录制已进入私有云上传队列，请在“录制”中查看状态。'],
   failed:['Recording interrupted. Received chunks are retained; check Recordings.','录制中断，已收到的片段将被保留，请查看“录制”。'],
@@ -44,6 +46,7 @@ export class MeetingRecorder{
     }
   }
   update(state){
+    if(this.finishing)state={...state,phase:'finalizing'};
     const changed=JSON.stringify(state)!==JSON.stringify(this.state);this.state=state||{phase:'off'};
     if(this.running&&!['active','paused'].includes(this.state.phase))this.stop(false);
     if(changed)this.render();
@@ -73,11 +76,14 @@ export class MeetingRecorder{
     }
     this.canvas=document.createElement('canvas');this.canvas.width=1280;this.canvas.height=720;this.ctx=this.canvas.getContext('2d');
     this.audio=new AudioContext();await this.audio.resume();this.destination=this.audio.createMediaStreamDestination();this.sources=new Map();
+    // A destination with no active inputs does not supply an audio clock in Chromium.
+    // Keep a zero-valued source: no microphone is enabled or fabricated by this.
+    this.silence=this.audio.createConstantSource();this.silence.offset.value=0;this.silence.connect(this.destination);this.silence.start();
     this.stream=this.canvas.captureStream(0);this.stream.addTrack(this.destination.stream.getAudioTracks()[0]);
     this.recorder=new MediaRecorder(this.stream,{mimeType:mime,videoBitsPerSecond:LIMITS.videoBitrate,audioBitsPerSecond:LIMITS.audioBitrate});
       const began=performance.now();const grant=await this.post('recording-start',{mime:mime.split(';')[0]});
       this.id=grant.id;this.allowed=new Set(grant.allowed);this.deadline=began+grant.lease_ms;
-      this.finished=false;this.pending=[];this.sequence=0;this.duration=0;this.started=performance.now();this.pausedMs=0;this.pausedAt=0;this.last=0;this.fault=false;this.encodedBytes=0;this.frames=0;this.drawMs=0;this.warnings.clear();this.reason='';this.metrics={requested:'1280×720/30FPS',track:((s)=>({width:s.width,height:s.height,frameRate:s.frameRate,aspectRatio:s.aspectRatio}))(this.stream.getVideoTracks()[0].getSettings()),codec:mime,videoBitrate:this.recorder.videoBitsPerSecond,audioBitrate:this.recorder.audioBitsPerSecond};
+      this.finished=false;this.pending=[];this.sequence=0;this.duration=0;this.started=performance.now();this.pausedMs=0;this.pausedAt=0;this.last=0;this.fault=false;this.failure=null;this.encodedBytes=0;this.frames=0;this.drawMs=0;this.warnings.clear();this.reason='';this.metrics={requested:'1280×720/30FPS',track:((s)=>({width:s.width,height:s.height,frameRate:s.frameRate,aspectRatio:s.aspectRatio}))(this.stream.getVideoTracks()[0].getSettings()),codec:mime,videoBitrate:this.recorder.videoBitsPerSecond,audioBitrate:this.recorder.audioBitsPerSecond};
       this.recorder.ondataavailable=e=>{
         if(!e.data.size)return;
         if(this.encodedBytes+e.data.size>LIMITS.maxBytes){this.fault=true;this.reason='size';this.stop(false);return;}
@@ -86,7 +92,7 @@ export class MeetingRecorder{
         if(e.data.size>8*1024*1024||this.pending.length>=8||size>32*1024*1024){this.fault=true;this.notice(recordingText('backlog'));this.stop(false);return;}
         this.pending.push(e.data);this.pump();
       };
-      this.recorder.onerror=()=>this.stop(false);
+      this.recorder.onerror=()=>{this.fault=true;this.failure={stage:'encoder',category:'error'};this.stop(false);};
       this.stopped=new Promise(resolve=>{this.recorder.onstop=resolve;});
       this.recorder.start(1000);this.running=true;this.draw();this.limitTimer=setInterval(()=>this.checkLimits(),1000);this.renewTimer=setInterval(()=>this.renew().catch(()=>this.stop(false)),500);
       this.update({...this.state,phase:'active'});
@@ -133,20 +139,20 @@ export class MeetingRecorder{
     this.uploading=(async()=>{
       while(this.pending.length){
         const blob=this.pending[0];let error;
-        if(this.mode==='local'){try{await this.writer.write(blob);const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))).map(x=>x.toString(16).padStart(2,'0')).join('');await this.api('/api/admin/recordings/local-checkpoint',{id:this.id,sequence:this.sequence,size:blob.size,digest});this.pending.shift();this.sequence++;continue;}catch(e){this.fault=true;this.pending=[];this.notice(recordingText('failed')+' '+e.name);queueMicrotask(()=>this.stop(false));break;}}
+        if(this.mode==='local'){try{await this.writer.write(blob);const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))).map(x=>x.toString(16).padStart(2,'0')).join('');await this.api('/api/admin/recordings/local-checkpoint',{id:this.id,sequence:this.sequence,size:blob.size,digest});this.pending.shift();this.sequence++;continue;}catch(e){this.fault=true;this.failure={stage:'local-write',category:e instanceof DOMException?e.name:'error'};this.pending=[];this.notice(recordingText('failed'));queueMicrotask(()=>this.stop(false));break;}}
         for(let attempt=0;attempt<3;attempt++){
           try{
             const me=await this.api('/api/me');
             const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),15000);
             try{
               const r=await fetch(`/api/admin/recordings/chunk?id=${this.id}&sequence=${this.sequence}`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/octet-stream','X-CSRF-Token':me.csrf},body:blob,signal:controller.signal});
-              if(!r.ok)throw new Error('Recording chunk was not acknowledged.');
+              if(!r.ok){this.failure={stage:'chunk',category:'http',status:r.status};throw new Error('Recording chunk was not acknowledged.');}
               const ack=await r.json();if(ack.sequence!==this.sequence+1)throw new Error('Invalid chunk acknowledgment.');
             }finally{clearTimeout(timeout);}
             error=null;break;
           }catch(e){error=e;}
         }
-        if(error){this.fault=true;this.pending=[];this.notice(recordingText('failed'));queueMicrotask(()=>this.stop(false));break;}
+        if(error){this.fault=true;this.failure??={stage:'chunk',category:'network'};this.pending=[];this.notice(recordingText('failed'));queueMicrotask(()=>this.stop(false));break;}
         this.pending.shift();this.sequence++;
       }
     })();
@@ -154,7 +160,7 @@ export class MeetingRecorder{
   }
   async stop(complete){
     if(this.finishing)return this.finishing;if(!this.running)return;
-    this.running=false;clearInterval(this.renewTimer);cancelAnimationFrame(this.frame);this.mute();
+    this.running=false;this.state={...this.state,phase:'finalizing'};this.render();clearInterval(this.renewTimer);cancelAnimationFrame(this.frame);this.mute();
     clearInterval(this.limitTimer);this.duration=Math.min(LIMITS.maxSeconds,(performance.now()-this.started-this.pausedMs-(this.pausedAt?performance.now()-this.pausedAt:0))/1000);
     if(this.recorder.state!=='inactive')this.recorder.stop();
     this.finishing=(async()=>{
@@ -164,10 +170,16 @@ export class MeetingRecorder{
         await this.post('recording-stop',{ack:true}).catch(()=>{});
         while(this.uploading||this.pending.length)await (this.uploading||this.pump());
         if(this.writer){await this.writer.close();this.writer=null;}
-        await this.api('/api/admin/recordings/finish',{id:this.id,complete:complete===true&&!this.fault,duration:this.duration,metrics:this.metrics,stop_reason:this.reason});
+        if(!this.encodedBytes){this.fault=true;this.failure={stage:'encoder',category:'empty'};}
+        if(this.failure)this.metrics.failure=this.failure;
+        const result=await this.api('/api/admin/recordings/finish',{id:this.id,complete:complete===true&&!this.fault,duration:this.duration,metrics:this.metrics,stop_reason:this.reason});
+        if(result.state==='failed')this.fault=true;
         this.notice(recordingText(this.fault||!complete?'failed':this.mode==='local'?'localSaved':'saved')+(this.reason?' '+recordingText(this.reason):''));
-      }catch{this.notice(recordingText('failed'));}
-      finally{this.dispose();this.update({...this.state,phase:'stopped'});this.finishing=null;}
+      }catch{this.fault=true;this.failure??={stage:'finalize',category:'request-or-save'};this.notice(recordingText('failed'));
+        await this.api('/api/admin/recordings/finish',{id:this.id,complete:false,duration:this.duration,metrics:{...this.metrics,failure:this.failure},stop_reason:this.reason}).catch(()=>{});
+      }
+      finally{if(this.failure)this.notice((this.failure.category==='empty'?recordingText('empty'):recordingText('failed'))+' ['+this.failure.stage+':'+this.failure.category+(this.failure.status?':'+this.failure.status:'')+']');
+      this.dispose();this.finishing=null;this.update({...this.state,phase:'stopped'});}
     })();return this.finishing;
   }
   checkLimits(){
@@ -178,5 +190,5 @@ export class MeetingRecorder{
     if(changed||this.running)this.render();
     if(this.running&&limits.stop){this.reason=limits.stop;this.stop(true);}
   }
-  dispose(){clearInterval(this.limitTimer);if(this.writer){this.writer.abort().catch(()=>{});this.writer=null;}clearInterval(this.renewTimer);cancelAnimationFrame(this.frame);this.mute();this.stream?.getTracks().forEach(t=>t.stop());this.audio?.close().catch(()=>{});this.sources?.clear();}
+  dispose(){clearInterval(this.limitTimer);if(this.writer){this.writer.abort().catch(()=>{});this.writer=null;}clearInterval(this.renewTimer);cancelAnimationFrame(this.frame);this.mute();if(this.silence){try{this.silence.stop();}catch{}this.silence=null;}this.stream?.getTracks().forEach(t=>t.stop());this.audio?.close().catch(()=>{});this.sources?.clear();}
 }

@@ -1,0 +1,12 @@
+Windows Server 2025 / Python 3.13.12
+Ran 232 tests in 341.644s
+Passed 225; skipped 7; failures/errors 0.
+Outcome: success
+Skips:
+'Optional installed dependency runtime required'
+'Official local MiniSBD models required'
+'Optional installed SentencePiece runtime required'
+'Optional installed SentencePiece runtime required'
+'Optional Chromium/Playwright/ffprobe harness unavailable'
+'Optional real Chromium/FFmpeg integration harness unavailable'
+'Optional real Chromium/HTTPS restart harness unavailable'

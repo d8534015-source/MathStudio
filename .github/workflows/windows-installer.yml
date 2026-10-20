@@ -1,7 +1,7 @@
 name: Windows teacher installer
 on:
   pull_request:
-    branches: ['codex/delivery-v4166', 'codex/argos-offline-v4166', 'codex/teacher-website-management-v4166', 'codex/classroom-recording-pen-v4166']
+    branches: ['codex/delivery-v4166', 'codex/argos-offline-v4166', 'codex/teacher-website-management-v4166', 'codex/classroom-recording-pen-v4166', 'codex/recording-resources-policies-v4166']
     paths:
       - '**.py'
       - 'requirements.txt'
@@ -31,6 +31,9 @@ jobs:
       - name: Install hash-locked test dependencies
         run: |
           python -m pip install --require-hashes --only-binary=:all: -r requirements.txt
+      - name: Focused native input and shutdown regressions
+        timeout-minutes: 2
+        run: python -m unittest test_native_input_shutdown -v
       - name: Full regression suite (UTF-8)
         id: regression
         timeout-minutes: 15

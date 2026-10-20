@@ -1,0 +1,156 @@
+{
+  "source_commit": "a22df221e0f68482017d094c53dce292cc0c2ad0",
+  "base_pr": 11,
+  "draft_pr": 12,
+  "base_commit": "336d744c0680183832ac499ddaa4a1e93ea47721",
+  "build_id": "v41.6.6-stop-input-review1",
+  "manifest_sha256": "e87ef7118ababb4b1ab9ac63a0ac5e90a040b329fa04dee8ebf38c51f6bb9b18",
+  "owner_zip_sha256": "9d21b5f0a6d7a7855d5d2538ee774960afbdb8b6e076327729bda9f5576e3ebb",
+  "owner_zip_entries": 160,
+  "owner_zip_crc": "passed",
+  "owner_exact_allowlist_and_hashes": "passed",
+  "python_full_suite": {
+    "executed": 232,
+    "passed": 226,
+    "skipped": 6,
+    "failed": 0,
+    "seconds": 38.121,
+    "platform": "Linux CPython3.13 / Xvfb",
+    "skip_reasons": [
+      "2 genuine Windows DPAPI checks",
+      "1 actual Win32 hit-testing check",
+      "3 optional browser harnesses executed separately in Playwright runtime"
+    ]
+  },
+  "focused_native_shutdown_localization_setup": {
+    "executed": 36,
+    "passed": 35,
+    "skipped": 1,
+    "failed": 0
+  },
+  "existing_node_browser_workflows": {
+    "passed": 15,
+    "failed": 0
+  },
+  "node_recording_limits": {
+    "passed": 1,
+    "failed": 0
+  },
+  "real_browser_backend_integration": {
+    "passed": true,
+    "seconds": 6.494,
+    "checks": [
+      "Authenticated real OWNER endpoints",
+      "actual sub-second silent teacher-only capture (no mic source), nonempty encoded chunks",
+      "normal Stop and final chunk flushing",
+      "two consenting synthetic participants",
+      "real R2 multipart implementation with in-memory transport",
+      "delayed completion acknowledgment does not mark Ready",
+      "real FFmpeg stream-copy indexing, playback upload acknowledgment and seek",
+      "real encoded local-file decode with mocked Save As/writer and no cloud media upload",
+      "repeated recording cycles"
+    ],
+    "live_r2": false,
+    "physical_devices": false,
+    "file_picker": "mocked",
+    "final_source_rerun_seconds": 6.455,
+    "harness_platform": "Linux Python3.12 / Playwright; separate from pinned Python3.13 suite"
+  },
+  "other_browser_checks": {
+    "separate_process_https_remember_me": "passed",
+    "multi_source_audio_video_screen_annotations_pause_stop_mux_decode_index_seek": "passed after isolated rerun"
+  },
+  "isolated_recording_metrics": {
+    "capture_fps": 29.6,
+    "canvas_cpu_ms": 370,
+    "missed_capture_frame_estimate": 0,
+    "received_camera_playback_drops": 162,
+    "playback_drops_are_not_rtp_or_encoded_loss": true,
+    "js_heap_bytes": 1429501,
+    "whole_browser_cpu_one_core_percent_approx": 63.7,
+    "original_bytes": 167045,
+    "indexed_bytes": 167365,
+    "indexed_frames": 77,
+    "indexed_duration_seconds": 2.585
+  },
+  "initial_attempts": {
+    "linux_full_suite": "Seven errors due to unavailable old Xvfb display; restored existing Xvfb, verified Tk connection, reran full suite successfully. No failures hidden.",
+    "browser_performance": "Existing unchanged FPS assertion failed at19.8 while sharing CPU with full suite; rerun alone passed at29.6. Actual sustained physical performance remains unverified.",
+    "first_windows": {
+      "run_id": 39509206409,
+      "executed": 232,
+      "passed": 224,
+      "failed": 1,
+      "skipped": 7,
+      "finding": "Toolbar checks passed; blank non-transient panel probe mismatched. Final probe uses actual transient button and consistent native coordinates with separate native-region/hit-target assertions. Four-test Windows preflight passed."
+    }
+  },
+  "root_causes": {
+    "recording": "Unconnected WebAudio destination generated no audio clock; Chromium returned zero encoded chunks. Browser ignored failed finish state and announced success. Reproduced before fix against real backend; after fix nonempty media decodes.",
+    "end_ordering": "Native End dropped room and browser End sent remote closure before encoder drain. Explicit pending/deferred closure now waits for Stop and committed chunk finalization, not cloud processing on teacher PC.",
+    "native_input": "Fullscreen input HWND had no exclusions for control coordinates and relied on topmost order. Actual native-region holes protect toolbar/panels independently of raised input ordering; real Win32 CI acceptance recorded separately.",
+    "ui_blocking": "Synchronous UI-thread HTTP in native end/close/Video/screen controls; now owned asynchronous workers and nonblocking local teardown."
+  },
+  "unchanged": [
+    "WebRTC negotiation/TURN",
+    "pen sampling and rendering pipeline",
+    "private R2 provider",
+    "guardian and participant requirements",
+    "scheduled absentee named-account/absence/scope/range checks",
+    "explicit sharing/manual Messages delivery; Instant private",
+    "bilingual draft policies/student Remember Me/Argos/Website Management",
+    "pinned dependencies"
+  ],
+  "physical_windows11_mobile": "requires user acceptance",
+  "live_r2": "not contacted; in-memory transport only",
+  "real_windows_save_as_low_disk": "unverified; API contract mocked",
+  "three_hour_five_gb_endurance": "unverified",
+  "render": "not deployed",
+  "private_data_credentials_models_recordings_bundled": false,
+  "main_modified": false,
+  "merged": false,
+  "deployed": false,
+  "paid_resources_created": false,
+  "main_remote_ref_unchanged": "d0c53c78771ed0a49cdc77c7661b3b19f8f37e82",
+  "subsequent_focused_drain_tests": {
+    "passed": 5,
+    "failed": 0
+  },
+  "windows_native_preflight": {
+    "passed": 4,
+    "failed": 0,
+    "run_id": 39510576947
+  },
+  "windows_ci": {
+    "run_id": 39510576947,
+    "source_commit": "a22df221e0f68482017d094c53dce292cc0c2ad0",
+    "synthetic_ci_merge_commit": "de6c8814d3977c7ab46127164052ac7d90b72bcd",
+    "platform": "Windows Server 2025 / CPython 3.13.12; not a physical Windows 11 test",
+    "executed": 232,
+    "passed": 225,
+    "skipped": 7,
+    "failed": 0,
+    "seconds": 341.644,
+    "skip_reasons": [
+      "'Optional installed dependency runtime required'",
+      "'Official local MiniSBD models required'",
+      "'Optional installed SentencePiece runtime required'",
+      "'Optional installed SentencePiece runtime required'",
+      "'Optional Chromium/Playwright/ffprobe harness unavailable'",
+      "'Optional real Chromium/FFmpeg integration harness unavailable'",
+      "'Optional real Chromium/HTTPS restart harness unavailable'"
+    ],
+    "installer_build": "passed",
+    "unicode_long_path_install_no_python_on_path_uninstall_reinstall": "passed",
+    "windows_dpapi_and_runtime_smoke": "passed",
+    "client_only_isolation": "passed",
+    "owned_process_cleanup": "passed",
+    "source_manifest_match": "passed",
+    "authenticode": "NotSigned",
+    "defender": "scan_completed",
+    "threats_in_build": 0
+  },
+  "win32_input_test": "passed: actual raised-window hit testing, moved toolbar/control panel exclusion, repeated mode transitions and owned capture release",
+  "installer_sha256": "a507a10c0479cb588e8aaa21a39c6600246f5703e4f8da3987a58e6f8b3df475",
+  "windows_actions_archive_sha256": "2c4fb3d5aaf68c287a7f333a1aa3f486c53c3ae0541d25fc39a7a42dd8417fe7"
+}

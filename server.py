@@ -1140,9 +1140,13 @@ class Handler(BaseHTTPRequestHandler):
                     self.send({'ok':True,'active':active,'seq':native['seq']}); return
                 if self.path_only=='/api/teacher-app/end':
                     with LOCK:
+                        if RECORDING_STORE.defer_end(room):
+                            self.send({'ok':False,'pending':True},202);return
                         with db() as c:
                             current=c.execute('SELECT * FROM classes WHERE id=?',(item['class_id'],)).fetchone()
-                            need(current and current['status']=='scheduled','Classroom is already closed.',409)
+                            need(current,'Classroom unavailable.',404)
+                            if current['status']!='scheduled':
+                                self.send({'ok':True});return
                             c.execute("UPDATE classes SET live=0,status='completed' WHERE id=?",(item['class_id'],))
                             c.execute('UPDATE instant_meetings SET active=0 WHERE class_id=?',(item['class_id'],))
                         ROOMS.pop(item['class_id'],None)
@@ -2027,6 +2031,7 @@ class Handler(BaseHTTPRequestHandler):
                             need(time.time()>=cl['start']-1800,'The classroom can be opened from 30 minutes before the scheduled start. If the lesson starts late, it remains available until you end or cancel it.')
                             c.execute('UPDATE classes SET live=1 WHERE id=?',(cid,))
                         else:
+                            if action=='end' and RECORDING_STORE.defer_end(room_for(cid)):return {'ok':False,'pending':True}
                             c.execute('UPDATE classes SET live=0,status=? WHERE id=?',('cancelled' if action=='cancel' else 'completed',cid))
                             c.execute('UPDATE instant_meetings SET active=0 WHERE class_id=?',(cid,))
                             ROOMS.pop(cid,None)
