@@ -1,0 +1,6 @@
+{
+  "authenticode": "NotSigned",
+  "trusted_signing_performed": false,
+  "defender": "scan_completed",
+  "threats_in_build": 0
+}
