@@ -1,0 +1,137 @@
+{
+  "source_commit": "b23bb7b1e21ec966838ffe3154b666319a0386df",
+  "base_pr": 10,
+  "draft_pr": 11,
+  "base_commit": "416438d798362234ce821e5e17e6b65d0275e3f2",
+  "build_id": "v41.6.6-recording-upgrade-review1",
+  "manifest_sha256": "f3d0efbf3d9fd13faea0b2e79d669be3918378c539f487383b57e4f0775604d0",
+  "owner_zip_sha256": "6e735d6e5101e1e56445f56d49d4b20165723195578e98160d459676b310c250",
+  "owner_zip_entries": 155,
+  "owner_zip_crc": "passed",
+  "owner_zip_exact_allowlist_and_hashes": "passed",
+  "python_full_suite": {
+    "executed": 222,
+    "passed": 218,
+    "skipped": 4,
+    "failed": 0,
+    "seconds": 35.937,
+    "platform": "Linux CPython 3.13 / Xvfb",
+    "skips": [
+      "2 genuine Windows DPAPI tests",
+      "2 optional browser harnesses run separately using Playwright runtime"
+    ],
+    "subsequent_change": "First-party localization: eight targeted tests + Node passed; Windows backup connection leak fixed: five focused recording-upgrade tests passed. Final Windows suite exercises final source."
+  },
+  "node_browser_workflows": {
+    "passed": 15,
+    "failed": 0
+  },
+  "node_recording_limits": {
+    "passed": 1,
+    "failed": 0
+  },
+  "final_localization": {
+    "passed": 8,
+    "failed": 0
+  },
+  "real_browser_checks": [
+    "Synthetic 3-camera/3-microphone MediaRecorder, screen/board transitions, letterboxing and synchronized annotations",
+    "disabled sources excluded, pause/resume, duplicate-action guard, original tracks survive",
+    "mocked local Save As/writer contract and finalization",
+    "simulated 3h/5GB stop and two independent warnings",
+    "actual encoded video/audio decoded; FFmpeg indexed and seeked",
+    "authenticated Resources HTML5 playback/seek and Range handling through backend with mocked R2",
+    "bilingual policy/privacy controls, initially unchecked acknowledgments",
+    "separate Chromium process restart with HTTPS persistent login rotation/logout"
+  ],
+  "recording_sample": {
+    "capture_fps": 29.6,
+    "target_fps": 30,
+    "width": 1280,
+    "height": 720,
+    "canvas_cpu_ms": 329.1,
+    "missed_capture_frame_estimate": 1,
+    "received_camera_playback_drops": 162,
+    "playback_drop_counter_is_not_rtp_or_encoded_loss": true,
+    "js_heap_bytes": 1385312,
+    "whole_browser_cpu_one_core_percent_approx": 58.1,
+    "original_bytes": 171705,
+    "indexed_frames": 77,
+    "indexed_seconds": 2.629,
+    "indexed_bytes": 172025
+  },
+  "actual_cloud_webrtc_loopback": "ICE did not establish; remote transport not claimed",
+  "physical_windows11_mobile": "unverified",
+  "live_private_r2": "unverified; mocked transport only",
+  "three_hour_five_gb_endurance": "unverified; thresholds simulated",
+  "real_windows_file_picker_low_disk": "unverified; browser API contract mocked",
+  "guardian_verification_legal_review": "manual OWNER/professional review required; no compliance certification",
+  "windows_ffmpeg": "explicit trusted installation/configuration required; absent processor blocks absentee sharing",
+  "render": "not deployed; persistent metadata/spools/indexes and FFmpeg required",
+  "production_data_credentials_models_recordings_bundled": false,
+  "main_modified": false,
+  "merged": false,
+  "deployed": false,
+  "paid_resources_created": false,
+  "initial_windows_attempt": {
+    "run_id": 39358308126,
+    "tests": 222,
+    "passed": 215,
+    "errors": 1,
+    "skipped": 6,
+    "failure": "Backup verification SQLite connection remained open; fixed deterministically and closure-count regression added."
+  },
+  "backup_fix_focused": {
+    "passed": 5,
+    "failed": 0
+  },
+  "main_remote_ref_unchanged": "d0c53c78771ed0a49cdc77c7661b3b19f8f37e82",
+  "focused_python": {
+    "preservation": 51,
+    "recording_sharing_policies": 28,
+    "policy_auth_local_upload": 15,
+    "failed": 0,
+    "overlapping_counts": true
+  },
+  "backup_leak_pre_fix_reproduced": true,
+  "inherited_ancestry": {
+    "pr8_argos": "cd09b99 (ancestor confirmed)",
+    "pr9_delivery": "d0580ff (ancestor confirmed)",
+    "pr10_delivery": "416438d798362234ce821e5e17e6b65d0275e3f2 (ancestor confirmed)"
+  },
+  "second_windows_attempt": {
+    "run_id": 39358997739,
+    "outcome": "CI-only eight-minute timeout while tests were progressing; no assertion failure in captured log",
+    "resolution": "CI allowance raised to 15 minutes; no test assertions or application timeouts changed"
+  },
+  "windows_ci": {
+    "run_id": 39360023728,
+    "source_commit": "b23bb7b1e21ec966838ffe3154b666319a0386df",
+    "synthetic_ci_merge_commit": "7c465bc0b65bf01266ad1ad1b43f417f2cbfae85",
+    "platform": "Windows Server 2025 / CPython 3.13.12; not a physical Windows 11 test",
+    "executed": 222,
+    "passed": 216,
+    "skipped": 6,
+    "failed": 0,
+    "seconds": 277.999,
+    "skip_reasons": [
+      "'Optional installed dependency runtime required'",
+      "'Official local MiniSBD models required'",
+      "'Optional installed SentencePiece runtime required'",
+      "'Optional installed SentencePiece runtime required'",
+      "'Optional Chromium/Playwright/ffprobe harness unavailable'",
+      "'Optional real Chromium/HTTPS restart harness unavailable'"
+    ],
+    "installer_build": "passed",
+    "unicode_long_path_install_no_python_on_path_uninstall_reinstall": "passed",
+    "windows_dpapi_and_runtime_smoke": "passed",
+    "client_only_isolation": "passed",
+    "owned_process_cleanup": "passed",
+    "source_manifest_match": "passed",
+    "authenticode": "NotSigned",
+    "defender": "scan_completed",
+    "threats_in_build": 0
+  },
+  "installer_sha256": "1112cc302e6172f278034ca78f8863dd6ca6c1f295446807052cf3040f531763",
+  "windows_actions_archive_sha256": "86de40a790a6fb0a01d3fc52f08a40dd103d1e727b89ffca8ae43a764b79ecaf"
+}
