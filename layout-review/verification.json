@@ -1,0 +1,158 @@
+{
+  "source_commit": "88c0226b985347f4b4eba59c5dffa684700eefe8",
+  "base_pr": 12,
+  "draft_pr": 13,
+  "base_commit": "4b9c04c862377befb4dd926ea5fad922cc8443e2",
+  "build_id": "v41.6.6-layout-review1",
+  "manifest_sha256": "118fe49c9b1320a3cfef9512d917eae3978fc9faa5089f16228bb7d578c9dfcd",
+  "owner_zip_sha256": "d774b23ec0305bab0d97b63ed383644503483465b3f3b853838d4e11edec1b30",
+  "owner_zip_entries": 165,
+  "owner_zip_crc": "passed",
+  "owner_exact_allowlist_and_hashes": "passed",
+  "python_full_suite": {
+    "executed": 234,
+    "passed": 227,
+    "skipped": 7,
+    "failed": 0,
+    "seconds": 39.912,
+    "platform": "Linux CPython3.13 / Xvfb",
+    "skip_reasons": [
+      "2 actual Windows DPAPI checks",
+      "1 actual Win32 input check",
+      "4 optional browser harnesses; three recording harnesses executed separately"
+    ]
+  },
+  "focused_native_stop_setup_packaging": {
+    "executed": 35,
+    "passed": 34,
+    "skipped": 1,
+    "failed": 0
+  },
+  "node_browser_workflows": {
+    "passed": 15,
+    "failed": 0
+  },
+  "node_recording_layout": {
+    "passed": 3,
+    "failed": 0
+  },
+  "node_recording_limits": {
+    "passed": 1,
+    "failed": 0
+  },
+  "actual_browser_recording_tests": {
+    "executed": 3,
+    "passed": 3,
+    "failed": 0,
+    "seconds": 23.654,
+    "synthetic_media": true,
+    "tests": [
+      "Dynamic layouts decoded from actual encoded video; camera-only centered, two-camera grid, disabled/ended camera avatars, screen/board transitions, zero participants, same encoder throughout",
+      "Authenticated OWNER Stop/final chunks, silent teacher-only, two consenting participants, held private multipart acknowledgment, actual FFmpeg indexing/seek, local Save As writer contract",
+      "Existing enabled audio/cameras, screen/annotations, pause/resume, mux/decode, seekable indexed playback"
+    ]
+  },
+  "capture_metrics": {
+    "dynamic_layout": {
+      "capture_fps": 29.2,
+      "canvas_cpu_ms": 256.2,
+      "missed_capture_frames_estimate": 4,
+      "js_heap_bytes": 3401235
+    },
+    "existing_multi_source": {
+      "capture_fps": 28.5,
+      "canvas_cpu_ms": 378.6,
+      "missed_capture_frames_estimate": 3,
+      "received_camera_playback_drops": 161,
+      "browser_cpu_percent_one_core_approx": 62.9,
+      "js_heap_bytes": 1536536,
+      "original_bytes": 220434,
+      "indexed_bytes": 220756,
+      "indexed_frames": 74,
+      "indexed_duration_seconds": 2.574
+    },
+    "dimensions": [
+      1280,
+      720
+    ],
+    "target_fps": 30,
+    "capture_track_reported_frame_rate": 0,
+    "frame_rate_note": "Unchanged captureStream(0) uses manual requestFrame at a 30 FPS target. Effective capture rate is measured; dropped playback frames are not encoded/RTP loss."
+  },
+  "initial_test_failures": {
+    "toolbar": "Shared Tk grid columns across wrapped rows could still exceed available width; replaced with independent measured flow rows. Focused visibility and negative-coordinate assertions now pass.",
+    "browser_fixture": "Synthetic upload reply lacked the real acknowledgment sequence; fixture corrected to server contract. Capture track settings frameRate=0 is expected for requestFrame, so assert measured capture and configured target rather than claiming fixed hardware FPS.",
+    "node_invocation": "Old Node/unsupported experimental default-type flag rejected; assertions ran and passed with existing Node24 auto module detection."
+  },
+  "unchanged": [
+    "WebRTC/ICE/TURN/track negotiation",
+    "Microphone mixing and consent leases",
+    "Native pen sample/ink pipeline, input exclusions and asynchronous shutdown",
+    "Private R2/local upload, final chunks and FFmpeg indexing",
+    "Security, scheduling/timezones, guardian/legal/policy gates, private scheduled absentee sharing and manual Messages",
+    "Argos models/dependencies, translation approvals and storage",
+    "Student Remember Me and teacher DPAPI"
+  ],
+  "physical_windows11": "unverified; acceptance checklist in LAYOUT_REVIEW.md",
+  "mixed_monitor_dpi": "synthetic Tk font scaling/monitor-boundary tests only; real hardware unverified",
+  "live_r2": "not contacted; synthetic transport only",
+  "actual_windows_save_as_and_low_disk": "unverified; file-picker/writer contract mocked",
+  "long_session_endurance": "unverified",
+  "teacher_client_only": true,
+  "owner_port": 5067,
+  "owner_profile": "MathStudioOwnerLayoutReview",
+  "teacher_profile": "MathStudioLayoutReview",
+  "private_data_credentials_models_recordings_bundled": false,
+  "main_modified": false,
+  "merged": false,
+  "deployed": false,
+  "paid_resources_created": false,
+  "additional_short_work_area_probe": {
+    "height": 600,
+    "dpi_scales": [
+      1,
+      1.5,
+      2
+    ],
+    "languages": [
+      "en",
+      "zh"
+    ],
+    "outcome": "passed",
+    "test_source": "Same focused Tk test loaded with a 600-pixel mocked work area; no application or test source changes."
+  },
+  "windows_ci": {
+    "run_id": 39532994938,
+    "source_commit": "88c0226b985347f4b4eba59c5dffa684700eefe8",
+    "synthetic_ci_merge_commit": "ab60a31c1964cdaf823549949edfec0783a5710d",
+    "platform": "Windows Server 2025 / CPython 3.13.12; not a physical Windows 11 test",
+    "executed": 234,
+    "passed": 226,
+    "skipped": 8,
+    "failed": 0,
+    "seconds": 419.395,
+    "skip_reasons": [
+      "'Optional installed dependency runtime required'",
+      "'Official local MiniSBD models required'",
+      "'Optional installed SentencePiece runtime required'",
+      "'Optional installed SentencePiece runtime required'",
+      "'Optional Chromium/Playwright/ffprobe harness unavailable'",
+      "'Optional Chromium/FFmpeg harness unavailable'",
+      "'Optional real Chromium/FFmpeg integration harness unavailable'",
+      "'Optional real Chromium/HTTPS restart harness unavailable'"
+    ],
+    "installer_build": "passed",
+    "unicode_long_path_install_no_python_on_path_uninstall_reinstall": "passed",
+    "windows_dpapi_and_runtime_smoke": "passed",
+    "client_only_isolation": "passed",
+    "owned_process_cleanup": "passed",
+    "source_manifest_match": "passed",
+    "responsive_toolbar_dpi_and_negative_monitor_coordinates": "passed",
+    "authenticode": "NotSigned",
+    "defender": "scan_completed",
+    "threats_in_build": 0
+  },
+  "win32_input_test": "passed: actual raised-window hit testing, moved toolbar/control panel exclusion, repeated mode transitions and owned capture release",
+  "installer_sha256": "0fcc62a7f1d593ba01c1978b7445a7bac487d7dd97a8d5119976db78115f48df",
+  "windows_actions_archive_sha256": "b6dd312d827b4d2ba21782ffa7c552fa0309d8f704e09a2aad53d6eb27b14bed"
+}
