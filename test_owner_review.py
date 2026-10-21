@@ -18,7 +18,7 @@ class OwnerReviewTests(unittest.TestCase):
             env = review.environment(state)
         self.assertEqual(env['MATH_DATA'], str(state/'data'))
         self.assertEqual(env['MATH_ARGOS_HOME'], str(state/'translation'))
-        self.assertEqual(env['PORT'], '5065')
+        self.assertEqual(env['PORT'], '5067')
         self.assertEqual(env['BIND_HOST'], '127.0.0.1')
         for key in ('CLOUDFLARE_TURN_API_TOKEN', 'MATH_R2_SECRET_ACCESS_KEY', 'PYTHONPATH'):
             self.assertNotIn(key, env)
@@ -43,7 +43,7 @@ class OwnerReviewTests(unittest.TestCase):
             state = Path(directory); (state/'review-ready.json').write_text('{}')
             with mock.patch.object(review.socket, 'socket') as socket, mock.patch.object(review, 'run') as run:
                 socket.return_value.__enter__.return_value.bind.side_effect = OSError('busy')
-                with self.assertRaisesRegex(RuntimeError, '5065'): review.start(state)
+                with self.assertRaisesRegex(RuntimeError, '5067'): review.start(state)
                 run.assert_not_called()
 
     def test_launcher_references_are_present(self):

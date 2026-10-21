@@ -164,8 +164,7 @@ class TeacherMeetingApp:
         self.toolbar.configure(bg=self.BG)
         self.toolbar.attributes("-topmost", True)
         self.toolbar.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.toolbar.geometry("1260x176+24+24")
-        self.toolbar.minsize(1040, 160)
+        self.toolbar.withdraw()
         self.toolbar.bind_all("<Escape>", lambda _e: self.set_mode(False))
         self.toolbar.bind_all("<Alt-F4>", lambda _e: (self.on_close(), "break")[1])
         for event in ("<Configure>", "<Map>", "<Unmap>"):
@@ -189,6 +188,11 @@ class TeacherMeetingApp:
         self.root.after(16,self.drain_ui)
         self.build_toolbar()
         self.apply_toolbar_language()
+        from native_toolbar import ToolbarLayout
+        self.toolbar_layout = ToolbarLayout(self.toolbar, self.toolbar_containers, self.queue_input_region)
+        for var in (self.status_var, self.people_var, self.mode_var, self.student_var):
+            var.trace_add("write", lambda *_: self.toolbar_layout.schedule())
+        self.toolbar.deiconify()
         self.connect()
 
     # ---------- UI ----------
@@ -212,7 +216,7 @@ class TeacherMeetingApp:
         btn = tk.Button(
             parent, text=self.tr(text), command=command, bg=bg or self.PANEL_2, fg=fg or self.TEXT,
             activebackground=self.ACCENT_DARK, activeforeground="white", relief="flat",
-            bd=0, padx=padx, pady=7, width=width, cursor="hand2", highlightthickness=0,
+            bd=0, padx=padx, pady=7, width=None, cursor="hand2", highlightthickness=0,
             font=("Segoe UI", 9, "bold")
         )
         btn._mathstudio_en_text = text
@@ -221,6 +225,7 @@ class TeacherMeetingApp:
     def set_button_label(self, widget, text):
         widget._mathstudio_en_text = text
         widget.configure(text=self.tr(text))
+        if hasattr(self, "toolbar_layout"): self.toolbar_layout.schedule()
 
     def apply_toolbar_language(self, widget=None):
         widget = widget or self.toolbar
@@ -253,6 +258,7 @@ class TeacherMeetingApp:
         self.refresh_button_states()
         self.refresh_people()
         self.lang_button.configure(text='EN' if self.lang == 'zh' else '中文')
+        self.toolbar_layout.schedule()
 
     def build_toolbar(self):
         top = tk.Frame(self.toolbar, bg=self.BG, padx=14, pady=10)
@@ -333,6 +339,7 @@ class TeacherMeetingApp:
                  font=("Segoe UI", 9)).pack(side="left")
         tk.Label(footer, text="Interact = click through to apps · Draw = annotate desktop · Esc returns to Interact",
                  bg=self.BG, fg="#7f959e", font=("Segoe UI", 8)).pack(side="right")
+        self.toolbar_containers = (right, mode_box, top, row, footer)
         self.refresh_button_states()
 
     def bring_toolbar_forward(self):

@@ -2,14 +2,14 @@
   "schema": 1,
   "version": {
     "version": "41.6.6",
-    "build_id": "v41.6.6-stop-input-review1",
-    "asset_version": "41_6_6_stop_input1"
+    "build_id": "v41.6.6-layout-review1",
+    "asset_version": "41_6_6_layout1"
   },
-  "parent_commit": "336d744c0680183832ac499ddaa4a1e93ea47721",
-  "status": "Stop/finalization and native input/shutdown repair review stacked on PR11. Physical Windows11 acceptance required; no deployment.",
+  "parent_commit": "4b9c04c862377befb4dd926ea5fad922cc8443e2",
+  "status": "Responsive native toolbar and actual encoded media-aware layout review stacked on PR12; physical Windows11 acceptance required.",
   "folders": {
-    "owner": "MathStudio_v41_6_6_OWNER_Stop_Input_Review",
-    "teacher": "MathStudio_v41_6_6_TEACHER_Stop_Input_Review"
+    "owner": "MathStudio_v41_6_6_OWNER_Layout_Review",
+    "teacher": "MathStudio_v41_6_6_TEACHER_Layout_Review"
   },
   "runtime": {
     "python": "CPython 3.13 x64; final Linux/Windows CI results in the delivery verification report",
@@ -79,7 +79,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "aef0ced1c043c9983ce715c3741b3723ce83ff4d4ea942d28bcbcd20b3e716db"
+      "sha256": "ef53d545ec1940a36c888792fc29cf82d87b6585be87dca5092f99a6e826ed50"
     },
     "OPEN MATHSTUDIO TEACHER.bat": {
       "packages": [
@@ -198,7 +198,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "f032a205ee3524f1395e355e0ce803347eb21997dcff8a98cc678f725c84fb42"
+      "sha256": "4119b6e7640b4a5a958e75c3edc2b801350f4ca8e2d42a7e79bfe0875d3f1e72"
     },
     "cloud_storage.example.bat": {
       "packages": [
@@ -280,7 +280,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "e83ccbdd8fd880bcea833596072eb4fb1559dadd49d99e648c5a57720193d484"
+      "sha256": "2057c9785b99b6d08d1e6c9117fe03690d89f235c7302bb11c9718c3882117c5"
     },
     "runtime_setup.py": {
       "packages": [
@@ -372,7 +372,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "3fbd8a427620e085378a35f2a36a821d52333425ea704021d41572cb86f66f9f"
+      "sha256": "f17100a793044445a275872acb3fd93f137c2e0214327b8ea9b7bf8eef77dcf6"
     },
     "teacher_package_role.json": {
       "packages": [
@@ -431,7 +431,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "71185277ec04adcb9a6c3bfea4b3ddbee613c2572b2adec1f4e844ec658d9256"
+      "sha256": "a89165bd069a33e421c7a24b7b726e86efd27f71417d5764771d041dd6639a2c"
     },
     "owner_launcher.py": {
       "packages": [
@@ -455,7 +455,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "5b05d06a4b5fb599400049f89e888d4d45bfcc7c8842c59c34462e46756f25d0"
+      "sha256": "f855e8730005bd080b3a6b96c5603a78848fadcfcfc99533328a210206ed75aa"
     },
     "packaging/windows/MathStudio.spec": {
       "packages": [
@@ -467,7 +467,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "ea5a5e48e5cccbd6622cfee0e6f81491041f450c9d36a94600d3c993114b6a7f"
+      "sha256": "590fb129ec8afcf07d54fb6da4d4bc5dcced079abae40c47b504529c423be692"
     },
     "packaging/windows/requirements-build.txt": {
       "packages": [
@@ -479,7 +479,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "50321d785d49133c802cb77f816b1c295b04613c2481a11b353f77a765a1f230"
+      "sha256": "61087c193f2f6f588f30edf896ed56dd46fc4a2399daa3cc0e97c7fe0f0136e1"
     },
     "packaging/windows/README.md": {
       "packages": [
@@ -491,7 +491,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "605b5ab55e3d9f9ed7519a3655f1bc74feef626d72fafc55843f70c50cc49579"
+      "sha256": "236e8316ff6bc4c5383cbebc7caacceb0f0c3d41c3f8e5f9266f8d731790e113"
     },
     "packaging/windows/check_owner_cleanup.py": {
       "packages": [
@@ -721,13 +721,13 @@
       "packages": [
         "owner"
       ],
-      "sha256": "2e548286678af5ad5eca9bde590a681566ea6b63145dcc0d9f247b0feab4fe38"
+      "sha256": "7fd1a2125e3c79d4de66e33d6acee96a57b8c4741b9f8f1bcb1cd992f2974f63"
     },
     "test_owner_review.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "c0940c10811d6e45c57e8ecd8f1973d2132839dd73bf96734d9f666c9f3ffbda"
+      "sha256": "42ffb9ff6d94660354e3a5e37148d70951e2149fca72c7a72db5bce9fd0e7275"
     },
     "REVIEW OWNER SETUP.bat": {
       "packages": [
@@ -745,7 +745,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "06853513ac237895e0a7a94375e1434d671c205d0e2c2b56db1ebb26ce8a5d57"
+      "sha256": "ee634a7115603c05314b25d6b2eedd92d30d071c81216a930e344d4da77ff9cf"
     },
     "owner_auth.py": {
       "packages": [
@@ -777,7 +777,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "009952a2af9e60e0222c49a8cade0a7270d24881f026db813907935e32dfdb6e"
+      "sha256": "0c011fb7a7d503d8a145c68c1f800bb7f5460496d45c16d1e6610678ee84889f"
     },
     "annotation_pipeline.py": {
       "packages": [
@@ -797,7 +797,7 @@
       "packages": [
         "owner"
       ],
-      "sha256": "7d5c73870a8bb2ef48a00a320260cda4821d2a1609ea197bc55b93f4353d51ff"
+      "sha256": "bf5ff488321bd650dd6e40101a940a7855dba49014ed8ba68879a2174aaea795"
     },
     "classroom_recording.py": {
       "packages": [
@@ -1029,6 +1029,38 @@
         "owner"
       ],
       "sha256": "e4155cb73e3f62763a1d1b4485ee703aea0650efc59dbd357a04127d8aeab544"
+    },
+    "native_toolbar.py": {
+      "packages": [
+        "owner",
+        "teacher"
+      ],
+      "sha256": "9f55b6dc7551bc8d3ecafd8afbb8aa2ba2bbec10ba3a96296e7af4d6fa8ade3d"
+    },
+    "test_responsive_toolbar.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "e96f47f3ab3626299af670e89ab47340e91d4091e26fc8494a1911d9b27c4a9c"
+    },
+    "test_recording_layout.mjs": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "d96ac8f238c6b5266242a2fb24c5e439d35d60beedab86865f0cf0aa318f4553"
+    },
+    "test_recording_layout_browser.py": {
+      "packages": [
+        "owner"
+      ],
+      "sha256": "58c610d8f87636791e44b14ad7bf4ed011b3891fd17b448f8b101f42b1431435"
+    },
+    "LAYOUT_REVIEW.md": {
+      "packages": [
+        "owner",
+        "teacher"
+      ],
+      "sha256": "3cfbcde2d07be76726e3f276bb278c02ffee9f6a88d847d32a01ce0c918fa79c"
     }
   },
   "owner_review": {
