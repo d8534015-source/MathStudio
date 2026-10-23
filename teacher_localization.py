@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 
 ZH = {
+  'Recordings':'录制记录',
   'Review and acknowledge the current Terms, Privacy and Cookie policies.':'请阅读并确认当前服务条款、隐私政策及 Cookie 政策。',
   'Review the current account policies before recording authorization.':'请先审核当前账户政策，再进行录制授权。',
   'Review and explicitly approve the current recording scope.':'请审核并明确同意当前录制范围。',

@@ -2,10 +2,10 @@
 param([switch]$Review)
 $ErrorActionPreference = 'Stop'
 $build = Join-Path $env:GITHUB_WORKSPACE 'work\windows-build'
-$installerName = if ($Review) { 'MathStudio-Stop-Input-Review.exe' } else { 'MathStudio.exe' }
-$productName = if ($Review) { 'MathStudio Stop Input Review' } else { 'MathStudio' }
-$stateFolder = if ($Review) { 'MathStudioStopInputReview' } else { 'MathStudio' }
-$productId = if ($Review) { '{9A1BDCF3-37D4-453C-96F5-91E138C29812}' } else { '{E5935B86-2D46-45F3-8B46-E7A922F8A513}' }
+$installerName = if ($Review) { 'MathStudio-Compact-Toolbar-Review.exe' } else { 'MathStudio.exe' }
+$productName = if ($Review) { 'MathStudio Compact Toolbar Review' } else { 'MathStudio' }
+$stateFolder = if ($Review) { 'MathStudioCompactReview' } else { 'MathStudio' }
+$productId = if ($Review) { '{979C86B4-3C28-4226-8E9B-0EE18960FA14}' } else { '{E5935B86-2D46-45F3-8B46-E7A922F8A513}' }
 $installer = Join-Path $build ('installer\' + $installerName)
 $target = Join-Path $env:LOCALAPPDATA ('MathStudio install test 中文 ü ' + ('long folder ' * 5) + 'app')
 $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 5051)

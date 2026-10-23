@@ -2,9 +2,9 @@
   #error BuildRoot must be supplied by the reviewed build script
 #endif
 #ifdef ReviewBuild
-  #define ProductName "MathStudio Stop Input Review"
-  #define ProductId "{{9A1BDCF3-37D4-453C-96F5-91E138C29812}"
-  #define InstallerName "MathStudio-Stop-Input-Review"
+  #define ProductName "MathStudio Compact Toolbar Review"
+  #define ProductId "{{979C86B4-3C28-4226-8E9B-0EE18960FA14}"
+  #define InstallerName "MathStudio-Compact-Toolbar-Review"
 #else
   #define ProductName "MathStudio"
   #define ProductId "{{E5935B86-2D46-45F3-8B46-E7A922F8A513}"
@@ -44,7 +44,7 @@ Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.i
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "{#SourcePath}\..\..\STOP_INPUT_REVIEW.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\..\..\COMPACT_TOOLBAR_REVIEW.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildRoot}\dist\MathStudioClient\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

@@ -592,17 +592,17 @@ export async function mountClassroom({api,toast,me,settings,classes,esc,tr=s=>s,
   function pcConnected(pc){return !!pc&&(pc.connectionState==='connected'||['connected','completed'].includes(pc.iceConnectionState));}
 
   const recorder=new MeetingRecorder({host:$('#recordingNotice'),admin,post,api,notice:note,snapshot:()=>{
-    const cameras=[{id:peer,element:$('#local'),enabled:!!cameraTrack?.enabled}];
+    const cameras=[{id:peer,name:people.find(p=>p.id===peer)?.name,element:$('#local'),enabled:!!cameraTrack?.enabled}];
     const audio=[{id:peer,track:audioTrack,enabled:!!audioTrack?.enabled&&!forcedMute}];
     for(const person of people){
-      const p=peers.get(person.id);if(!p)continue;
-      cameras.push({id:person.id,element:p.element.querySelector('video'),enabled:!!person.camera_on});
-      for(const track of p.element.querySelector('audio')?.srcObject?.getAudioTracks()||[])audio.push({id:person.id,track,enabled:!!person.mic_on&&!person.forced_mute});
+      if(person.id===peer)continue;const p=peers.get(person.id);
+      cameras.push({id:person.id,name:person.name,element:p?.element.querySelector('video'),enabled:!!person.camera_on});
+      for(const track of p?.element.querySelector('audio')?.srcObject?.getAudioTracks()||[])audio.push({id:person.id,track,enabled:!!person.mic_on&&!person.forced_mute});
     }
     let screen=null;
     if(nativeShare.active){const host=people.find(p=>p.role==='admin');if(host)screen={id:host.id,element:$('#nativePresentation')};}
     else if(presenter)screen={id:presenter,element:$('#presentation')};
-    return {cameras:cameras.filter(x=>x.element),audio,screen,board:canvas};
+    return {cameras,audio,screen,board:canvas,boardActive:!presenter&&!nativeShare.active&&viewMode==='whiteboard'};
   }});
   async function pollOnce(){
     const r=await api(`/api/room/poll?class=${cid}&peer=${peer}&since=${seq}&command_since=${teacherCommandSeq}`);people=r.peers;recorder.update(r.recording||{phase:'off'});drawingAllowed=admin||r.drawing;if($('#allow'))$('#allow').checked=r.drawing;

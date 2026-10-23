@@ -11,7 +11,7 @@ def state_directory():
         try:
             marker=json.loads(Path(__file__).with_name('teacher_package_role.json').read_text(encoding='utf-8'))
             if marker.get('review') is True:
-                selected=marker.get('review_profile');return base/(selected if selected in ('MathStudioClassroomReview','MathStudioRecordingUpgradeReview','MathStudioStopInputReview') else 'MathStudioReview')
+                selected=marker.get('review_profile');return base/(selected if selected in ('MathStudioClassroomReview','MathStudioRecordingUpgradeReview','MathStudioStopInputReview','MathStudioLayoutReview','MathStudioCompactReview') else 'MathStudioReview')
         except (OSError,ValueError):pass
     return base/'MathStudio'
 

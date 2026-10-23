@@ -1,7 +1,7 @@
 import {LIMITS,recordingLimits} from './recording_limits.js';
 // Records only media already received by this browser. Never alters a peer connection.
 export const TEXT={
-  days:['days','天'],teacherOnly:['Teacher only','仅教师'],noDownload:['No recipient download','接收者不可下载'],diagnostics:['Effective settings / diagnostics','实际设置／诊断'],
+  days:['days','天'],participant:['Participant','参与者'],teacherOnly:['Teacher only','仅教师'],noDownload:['No recipient download','接收者不可下载'],diagnostics:['Effective settings / diagnostics','实际设置／诊断'],
   cloud:['Cloud Recording','云端录制'],local:['Local Recording (Save As)','本地录制（另存为）'],future:['Allow a later explicit upload to private R2','允许以后明确上传至私有 R2'],sharing:['Authorize sharing with verified enrolled absentees','授权与已核实缺席的本课学生分享'],download:['Allow those recipients to download','允许这些接收者下载'],timeWarning:['30 minutes remain before the 3-hour limit.','距离 3 小时限制还剩 30 分钟。'],sizeWarning:['1 GB remains before the 5 GB limit (decimal GB).','距离 5 GB 限制还剩 1 GB（十进制）。'],time:['Stopped at the 3-hour limit.','已达到 3 小时时限，录制已停止。'],size:['Stopped to finalize within the 5 GB limit.','为确保文件不超过 5 GB，已停止并完成录制。'],localSaved:['Local file finalized. No automatic cloud upload occurred.','本地文件已完成，未自动上传至云端。'],localUnsupported:['Local Save As requires a browser supporting the File System Access API (current desktop Chrome/Edge).','本地另存为需要支持文件系统访问 API 的浏览器（新版桌面 Chrome／Edge）。'],quality:['Target 1280×720 / 30 FPS. Actual settings and measured capture FPS appear below.','目标 1280×720／30 FPS，实际设置与测得的捕获帧率显示在下方。'],slow:['Measured capture is below 27 FPS; target quality is not being sustained.','测得捕获帧率低于 27 FPS，未能维持目标质量。'],
   record:['Record','录制'],request:['Request recording (I consent)','请求录制（我同意）'],start:['Start recording','开始录制'],
   pause:['Pause','暂停'],resume:['Resume','继续'],stop:['Stop recording','停止录制'],agree:['I consent','我同意'],decline:['Decline / withdraw','拒绝／撤回同意'],
@@ -17,6 +17,31 @@ export const TEXT={
   confirm:['Before starting, read the notice and obtain every participant’s consent.','开始前，请阅读通知并取得所有参与者同意。']
 };
 export function recordingText(key){return TEXT[key]?.[document.documentElement.lang.startsWith('zh')?1:0]||key;}
+// Pure layout model shared by every encoded frame; no media or signaling mutation.
+export function initials(name){
+  const words=String(name||'').trim().split(/\s+/u).filter(Boolean);
+  if(!words.length)return '?';
+  const letters=words.length>1?[Array.from(words[0])[0],Array.from(words.at(-1))[0]]:Array.from(words[0]).slice(0,2);
+  return letters.join('').toUpperCase().replace(/[\p{C}]/gu,'').slice(0,8)||'?';
+}
+export function receivedCamera(item){
+  return !!(item.enabled&&item.element?.readyState>=2&&item.element.srcObject?.getVideoTracks().some(t=>t.enabled&&t.readyState==='live'&&!t.muted));
+}
+export function recordingLayout(count,main){
+  const bounds=main?{x:1036,y:12,w:232,h:696}:{x:16,y:16,w:1248,h:688};
+  if(!count)return [];
+  let cols=1,best=Infinity;
+  for(let n=1;n<=count;n++){
+    const rows=Math.ceil(count/n),ratio=(bounds.w/n)/(bounds.h/rows);
+    const score=Math.abs(Math.log(ratio/(16/9)))+(n*rows-count)*.08;
+    if(score<best){best=score;cols=n;}
+  }
+  const rows=Math.ceil(count/cols),w=bounds.w/cols,h=bounds.h/rows;
+  return Array.from({length:count},(_,i)=>{
+    const row=Math.floor(i/cols),inRow=Math.min(cols,count-row*cols);
+    return {x:bounds.x+(bounds.w-inRow*w)/2+(i%cols)*w+4,y:bounds.y+row*h+4,w:w-8,h:h-8};
+  });
+}
 export class MeetingRecorder{
   constructor({host,admin,post,api,snapshot,notice}){
     Object.assign(this,{host,admin,post,api,snapshot,notice});this.state={phase:'off'};this.pending=[];this.sequence=0;this.deadline=0;this.running=false;this.finishing=null;this.choice={mode:'cloud',sharing:false,download:false,future_upload:false};this.warnings=new Set();
@@ -122,16 +147,36 @@ export class MeetingRecorder{
     const ew=element.videoWidth||element.naturalWidth||element.width,eh=element.videoHeight||element.naturalHeight||element.height;
     if(!ew||!eh)return;const scale=Math.min(w/ew,h/eh);this.ctx.drawImage(element,x+(w-ew*scale)/2,y+(h-eh*scale)/2,ew*scale,eh*scale);
   }
+  availableSurface(element){
+    if(!element)return false;
+    if(element.tagName==='VIDEO')return element.readyState>=2&&element.srcObject?.getVideoTracks().some(t=>t.enabled&&t.readyState==='live'&&!t.muted);
+    return !!(element.complete&&element.naturalWidth);
+  }
+  tile(person,{x,y,w,h}){
+    const c=this.ctx,name=String(person.name||recordingText('participant')).replace(/[\p{C}]/gu,'').slice(0,100);
+    c.save();c.beginPath();c.rect(x,y,w,h);c.clip();c.fillStyle='#24364b';c.fillRect(x,y,w,h);
+    if(receivedCamera(person))this.contain(person.element,x,y,w,h);
+    else{c.fillStyle='#edf4ff';c.font=`600 ${Math.max(14,Math.min(72,h*.28))}px sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillText(initials(person.name),x+w/2,y+h/2,w-16);}
+    const label=Math.min(30,h*.25);c.fillStyle='#101d2bdd';c.fillRect(x,y+h-label,w,label);
+    c.fillStyle='#fff';c.font=`${Math.max(9,Math.min(17,label*.65))}px sans-serif`;c.textAlign='left';c.textBaseline='middle';c.fillText(name,x+8,y+h-label/2,w-16);c.restore();
+  }
   draw(){
     if(!this.running)return;
     if(performance.now()>=this.deadline||document.hidden){this.stop(false);return;}
     this.frame=requestAnimationFrame(()=>this.draw());if(performance.now()-this.last<1000/LIMITS.fps-1)return;this.last=performance.now();const drawBegan=performance.now();
     if(this.recorder.state==='paused'){this.mute();return;}
-    const data=this.snapshot();this.audioMix(data.audio);const c=this.ctx;c.fillStyle='#fff';c.fillRect(0,0,1280,720);
-    if(data.screen&&this.allowed.has(data.screen.id))this.contain(data.screen.element,0,72,1024,576);
-    this.contain(data.board,0,72,1024,576);
-    const cameras=data.cameras.filter(x=>x.enabled&&this.allowed.has(x.id)&&x.element.readyState>=2&&x.element.srcObject?.getVideoTracks().some(t=>t.readyState==='live'&&!t.muted));
-    cameras.forEach((x,i)=>this.contain(x.element,1024,i*720/6,256,720/6));
+    const data=this.snapshot();this.audioMix(data.audio);const c=this.ctx;
+    c.fillStyle='#101d2b';c.fillRect(0,0,1280,720);
+    const screen=data.screen&&this.allowed.has(data.screen.id)&&this.availableSurface(data.screen.element)?data.screen.element:null;
+    const main=!!screen||!!data.boardActive;
+    if(main){
+      c.fillStyle='#fff';c.fillRect(0,72,1024,576);
+      if(screen)this.contain(screen,0,72,1024,576);
+      if(data.board)this.contain(data.board,0,72,1024,576);
+    }
+    const participants=data.cameras.filter(x=>this.allowed.has(x.id));
+    const tiles=recordingLayout(participants.length,main);
+    participants.forEach((person,i)=>this.tile(person,tiles[i]));
     this.stream.getVideoTracks()[0].requestFrame();this.frames++;this.drawMs+=performance.now()-drawBegan;
   }
   async pump(){

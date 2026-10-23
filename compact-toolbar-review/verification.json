@@ -1,0 +1,187 @@
+{
+  "source_commit": "a77444c7bef419210cd6d5b257a5b0dbbca7e1ff",
+  "draft_pr": 13,
+  "review_revision": 2,
+  "base_commit": "a7b07a885d828ba72e24a38ac491e01f56f36510",
+  "build_id": "v41.6.6-layout-review2",
+  "manifest_sha256": "5b09d73ee3b49cdcd82bfaa83c99d685f15772261fc32cd019b73dbfd55cda7f",
+  "owner_zip_sha256": "5f4c365ef98ecb2fba18fefcf402c5cb1f06f581f631bcbdede3ca76849f1b28",
+  "owner_zip_entries": 166,
+  "owner_zip_crc": "passed",
+  "owner_exact_allowlist_and_hashes": "passed",
+  "python_full_suite": {
+    "executed": 236,
+    "passed": 229,
+    "skipped": 7,
+    "failed": 0,
+    "seconds": 38.825,
+    "platform": "Linux pinned CPython3.13 / Xvfb",
+    "skip_reasons": [
+      "2 actual Windows DPAPI tests",
+      "1 actual Win32 input test",
+      "4 optional real-browser harnesses"
+    ]
+  },
+  "focused_native_localization_setup_package": {
+    "executed": 40,
+    "passed": 39,
+    "skipped": 1,
+    "failed": 0,
+    "seconds": 4.638
+  },
+  "node_workflows": {
+    "passed": 15,
+    "failed": 0
+  },
+  "node_recording_layout": {
+    "passed": 3,
+    "failed": 0
+  },
+  "node_recording_limits": {
+    "passed": 1,
+    "failed": 0
+  },
+  "geometry_coverage": {
+    "tk_scaling_note": "Windows100%=96 DPI=96/72 Tk pixels/point;125/150/200% also simulated with actual font requests. Work-area fixtures are synthetic, not physical monitor acceptance.",
+    "work_areas": [
+      "1920\u00d71040,100% strict two-primary-row and <=200px height, EN/ZH",
+      "1920-wide at125/150/200%,EN/ZH",
+      "1024/768-wide at150%,EN/ZH",
+      "Negative monitor coordinates, movement and deliberate700px resizing"
+    ],
+    "linux_100_percent_observed": {
+      "en": [
+        1360,
+        170
+      ],
+      "zh": [
+        1228,
+        170
+      ]
+    },
+    "stale_maximum_regression": "Strict test starts with an1100\u00d7700 Tk maximum; current-monitor maximum must replace it before mapping.",
+    "mode_labels": "10 changes plus all-control bounds and geometry/exclusion callback checks; existing Win32 input/capture tests preserved"
+  },
+  "localization_coverage": [
+    "Actual sidebar tuple key/glyph/English label read from source",
+    "Existing toggle_language and show_page handlers exercised EN\u2192ZH\u2192EN repeatedly without restart",
+    "Sidebar, page title and library dialog key use central Recordings\u2192\u5f55\u5236\u8bb0\u5f55",
+    "Existing subtitle/Play/Download/Delete/Duration/Status translations checked with actual desktop tr fallback",
+    "Navigation stays recordings and page callback still runs"
+  ],
+  "prior_attempts": {
+    "expected_old_source_regression": "New strict two-row test failed both language cases against original PR13 helper; expected failure, not a release test result.",
+    "virtual_display": "Initial focused probe could not connect to old display95; started existing Xvfb on96 and reran focused tests successfully.",
+    "initial_linux_candidate": "236 run/229 passed/7 skipped,41.136s before Windows-specific WM-limit fix; final corrected result above.",
+    "windows_preflight_runs": [
+      40015475836,
+      40015770043
+    ],
+    "windows_preflight_result": "Both strict language cases failed because actual width was clamped to1028 (Tk maxsize1028\u00d7749), causing a217px tall wrapped layout despite1920 work-area fixture. Other native input/shutdown/localization tests passed. Full suite and installer were not run on those failed candidates.",
+    "verified_correction": "Dimensions-only Windows diagnostics plus isolated limited-maxsize reproduction confirmed the cap. Set current-monitor root.maxsize before mapping; keep all row/height/visibility assertions intact."
+  },
+  "unchanged_from_prior_pr13": [
+    "classroom_recorder.js",
+    "classroom.js",
+    "classroom_recording.py",
+    "recording_media.py",
+    "recording_cloud.py",
+    "server.py",
+    "native_input.py",
+    "annotation_pipeline.py",
+    "argos_worker.py",
+    "argos_runtime.py",
+    "argos_setup.py",
+    "guardian_authorization.py",
+    "recording_authorization.py",
+    "recording_resources.py",
+    "policy_service.py",
+    "student_auth.py",
+    "owner_auth.py",
+    "review_features.py",
+    "teacher_recordings.py"
+  ],
+  "recording_real_browser_inference": "Not rerun for this native-only revision. Recording implementations byte-for-byte unchanged; priorPR13 browser results are historical, not newly executed. Existing Node and full backend regressions executed above.",
+  "owner_rebuild_reason": "Complete OWNER source includes changed shared native/localization resources and matching build/version metadata. Rebuilt rather than reusing a mismatched old build.",
+  "owner_port": 5069,
+  "owner_profile": "MathStudioOwnerCompactReview",
+  "teacher_profile": "MathStudioCompactReview",
+  "teacher_client_only": true,
+  "prior_installations_overwritten": false,
+  "physical_windows11": "unverified; user acceptance required",
+  "mixed_monitor_dpi_and_physical_pen": "unverified; synthetic Tk and hosted Windows tests are distinct",
+  "live_r2_and_real_remote_devices": "not accessed",
+  "existing_argos_models": "unchanged; external storage, reuse instructions supplied; no model downloads",
+  "private_data_credentials_models_recordings_bundled": false,
+  "main_modified": false,
+  "merged": false,
+  "deployed": false,
+  "dns_changed": false,
+  "paid_resources_created": false,
+  "windows_ci": {
+    "run_id": 40016177192,
+    "source_commit": "a77444c7bef419210cd6d5b257a5b0dbbca7e1ff",
+    "synthetic_ci_merge_commit": "ba07e8f7c2dc19dced8908ecbf04570d0b99e580",
+    "platform": "Windows Server 2025 / CPython 3.13.12; not a physical Windows 11 test",
+    "executed": 236,
+    "passed": 228,
+    "skipped": 8,
+    "failed": 0,
+    "seconds": 578.922,
+    "skip_reasons": [
+      "'Optional installed dependency runtime required'",
+      "'Official local MiniSBD models required'",
+      "'Optional installed SentencePiece runtime required'",
+      "'Optional installed SentencePiece runtime required'",
+      "'Optional Chromium/Playwright/ffprobe harness unavailable'",
+      "'Optional Chromium/FFmpeg harness unavailable'",
+      "'Optional real Chromium/FFmpeg integration harness unavailable'",
+      "'Optional real Chromium/HTTPS restart harness unavailable'"
+    ],
+    "installer_build": "passed",
+    "unicode_long_path_install_no_python_on_path_uninstall_reinstall": "passed",
+    "windows_dpapi_and_runtime_smoke": "passed",
+    "client_only_isolation": "passed",
+    "owned_process_cleanup": "passed",
+    "source_manifest_match": "passed",
+    "responsive_toolbar_dpi_and_negative_monitor_coordinates": "passed",
+    "authenticode": "NotSigned",
+    "defender": "scan_completed",
+    "threats_in_build": 0
+  },
+  "win32_input_test": "passed: actual raised-window hit testing, moved toolbar/control panel exclusion, repeated mode transitions and owned capture release",
+  "windows_compact_geometry_observations": [
+    {
+      "lang": "en",
+      "width": 1186,
+      "height": 179,
+      "fixture": "real Windows Tk/fonts, mocked1920 work area at96DPI"
+    },
+    {
+      "lang": "en",
+      "width": 1210,
+      "height": 179,
+      "fixture": "real Windows Tk/fonts, mocked1920 work area at96DPI"
+    },
+    {
+      "lang": "zh",
+      "width": 1071,
+      "height": 179,
+      "fixture": "real Windows Tk/fonts, mocked1920 work area at96DPI"
+    },
+    {
+      "lang": "zh",
+      "width": 1095,
+      "height": 179,
+      "fixture": "real Windows Tk/fonts, mocked1920 work area at96DPI"
+    }
+  ],
+  "installer_sha256": "d9532706fb29de31ca655f7a7706ed32e32381ea1f59781970b297c60db89f9b",
+  "windows_actions_archive_sha256": "effcd327d0861304f2fcecbe361ba20294a8e501a4ccbd15d60d8893130704d9",
+  "windows_focused_preflight": {
+    "passed": 7,
+    "failed": 0,
+    "source_commit": "a77444c7bef419210cd6d5b257a5b0dbbca7e1ff",
+    "evidence": "Final Windows job preflight success; same tests included in complete suite."
+  }
+}

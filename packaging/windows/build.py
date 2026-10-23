@@ -24,7 +24,7 @@ def assets(review=False):
     from PIL import Image,ImageDraw
     target=HERE/'generated';target.mkdir(exist_ok=True)
     role=json.loads((ROOT/'teacher_package_role.json').read_text(encoding='utf-8'))
-    if review:role.update(review=True,review_profile='MathStudioStopInputReview')
+    if review:role.update(review=True,review_profile='MathStudioCompactReview')
     (target/'teacher_package_role.json').write_text(json.dumps(role)+'\n',encoding='utf-8')
     image=Image.new('RGBA',(256,256),'#0d2f34');draw=ImageDraw.Draw(image)
     draw.rounded_rectangle((8,8,248,248),radius=48,fill='#0d2f34',outline='#22a699',width=10)
@@ -63,7 +63,7 @@ def main():
     if hashlib.sha256(compiler.read_bytes()).hexdigest()!=INNO_SHA:raise RuntimeError('Inno Setup compiler checksum mismatch.')
     run([compiler,'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/DIR='+str(output/'inno')])
     run([output/'inno'/'ISCC.exe','/DBuildRoot='+str(output)]+(['/DReviewBuild=1'] if args.review else [])+[HERE/'MathStudio.iss'])
-    installer=output/'installer'/('MathStudio-Stop-Input-Review.exe' if args.review else 'MathStudio.exe')
+    installer=output/'installer'/('MathStudio-Compact-Toolbar-Review.exe' if args.review else 'MathStudio.exe')
     (installer.parent/'client-isolation.json').write_text(json.dumps(payload_check,indent=2)+'\n',encoding='utf-8')
     digest=hashlib.sha256(installer.read_bytes()).hexdigest()
     (installer.parent/'SHA256SUMS.txt').write_text(digest+'  '+installer.name+'\n',encoding='utf-8')
