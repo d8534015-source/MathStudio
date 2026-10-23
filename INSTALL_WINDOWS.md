@@ -1,4 +1,4 @@
-For the latest isolated responsive toolbar/recording review, use [LAYOUT_REVIEW.md](LAYOUT_REVIEW.md).
+For the latest isolated compact-toolbar/localization review (PR13 revision2), use [COMPACT_TOOLBAR_REVIEW.md](COMPACT_TOOLBAR_REVIEW.md).
 
 # Recording upgrade review candidate
 

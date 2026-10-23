@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $build = Join-Path $PSScriptRoot '..\..\work\windows-build'
-$installer = Join-Path $build 'installer\MathStudio-Layout-Review.exe'
+$installer = Join-Path $build 'installer\MathStudio-Compact-Toolbar-Review.exe'
 $signature = Get-AuthenticodeSignature -LiteralPath $installer
 $report = [ordered]@{
     authenticode = [string]$signature.Status

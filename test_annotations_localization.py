@@ -103,6 +103,40 @@ class LocalizationTests(unittest.TestCase):
         obj.apply_language=MethodType(ns['apply_language'],obj)
         return obj
 
+    def test_recordings_actual_sidebar_and_page_switch_immediately_both_directions(self):
+        import ast
+        from pathlib import Path
+        from teacher_localization import translate
+        tree=ast.parse(Path('teacher_desktop_app.py').read_text(encoding='utf-8'))
+        entry=next(node for node in ast.walk(tree) if isinstance(node,ast.Tuple) and len(node.elts)==3 and all(isinstance(v,ast.Constant) for v in node.elts) and node.elts[0].value=='recordings')
+        key,icon,label=ast.literal_eval(entry)
+        self.assertEqual(label,'Recordings')
+        obj=self.desktop();obj.lang='en';obj.current_page=key;obj._auth_busy=False
+        table=next(n.value for n in ast.walk(tree) if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='UI_ZH' for t in n.targets))
+        obj.UI_ZH=ast.literal_eval(table)
+        obj.tr=MethodType(extracted_functions('teacher_desktop_app.py',{'tr'},dict(translate_ui=translate))['tr'],obj)
+        obj.sidebar_buttons={key:LabelDouble(f'  {icon}   {label}')}
+        obj.page_title=LabelDouble();obj.page_subtitle=LabelDouble();obj.content=LabelDouble()
+        obj.root=LabelDouble(children=(obj.sidebar_buttons[key],obj.page_title,obj.page_subtitle,obj.content))
+        obj.clear_content=lambda:None;calls=[];obj.page_recordings=lambda:calls.append('recordings')
+        ns=extracted_functions('teacher_desktop_app.py',{'show_page','toggle_language'},dict(save_language=lambda lang:None))
+        obj.show_page=MethodType(ns['show_page'],obj);obj.toggle_language=MethodType(ns['toggle_language'],obj)
+        obj.show_page(key)
+        for lang in ('zh','en','zh','en'):
+            obj.toggle_language()
+            expected='录制记录' if lang=='zh' else 'Recordings'
+            self.assertEqual(obj.lang,lang)
+            self.assertEqual(obj.sidebar_buttons[key].text,f'  {icon}   {expected}')
+            self.assertEqual(obj.page_title.text,expected)
+            self.assertEqual(obj.page_subtitle.text,'私有云录制' if lang=='zh' else 'Private cloud recordings')
+            for source,chinese in [('Play','播放'),('Download','下载'),('Delete','删除'),('Duration','时长'),('Status','状态')]:
+                self.assertEqual(obj.tr(source),chinese if lang=='zh' else source)
+            self.assertEqual(obj.current_page,key)
+        self.assertEqual(len(calls),5)
+        # First-party library dialogs/titles use the same canonical central key.
+        self.assertEqual(translate('Recordings','zh'),'录制记录')
+        self.assertEqual(translate('Recordings','en'),'Recordings')
+
     def test_l10n01_protected_widget_content_is_never_translated(self):
         obj=self.desktop(); label=LabelDouble('Teacher'); label._mathstudio_no_translate=True
         for lang in ('zh','en','zh'):

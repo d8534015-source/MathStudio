@@ -804,7 +804,7 @@ class TeacherDesktopApp:
         'Dashboard':'主页','Schedule':'课表','Bookings':'预约','Students':'学生','Groups & chats':'群组与聊天','WORKSPACE':'工作台','Teacher workspace':'教师工作台','Administrator':'管理员','Refresh data':'刷新数据','Sign out':'退出登录',
         '  ⌂   Dashboard':'  ⌂   主页','  ▦   Schedule':'  ▦   课表','  ✓   Bookings':'  ✓   预约','  ◎   Students':'  ◎   学生','  ◫   Groups & chats':'  ◫   群组与聊天','  ⇩   Files & codes':'  ⇩   文件与分享码','  ◉   Meetings':'  ◉   在线课堂','  ⚙   Student site':'  ⚙   学生网站',
         'Files & codes':'文件与分享码','Meetings':'在线课堂','Student site':'学生网站','Refresh':'刷新','Refresh data':'刷新数据','Sign out':'退出登录',
-        'Recordings':'录制','Private cloud recordings':'私有云录制','Play':'播放','Download':'下载','Delete':'删除','Date':'日期','Meeting':'会议','Duration':'时长','Status':'状态','Recording is not ready.':'录制尚未就绪。','Permanently delete this private recording?':'永久删除此私有录制？','capturing':'正在录制','uploading':'正在上传','ready':'就绪','empty':'无内容','Interrupted':'已中断',
+        'Private cloud recordings':'私有云录制','Play':'播放','Download':'下载','Delete':'删除','Date':'日期','Meeting':'会议','Duration':'时长','Status':'状态','Recording is not ready.':'录制尚未就绪。','Permanently delete this private recording?':'永久删除此私有录制？','capturing':'正在录制','uploading':'正在上传','ready':'就绪','empty':'无内容','Interrupted':'已中断',
         'Today’s classes, requests, and student website status':'今天的课程、预约和学生网站状态',
         'Set availability, post group lessons, and review the week':'设置可预约时间、发布小班课并查看本周课表',
         'Confirm requests and manage scheduled classes':'确认预约并管理已安排课程',

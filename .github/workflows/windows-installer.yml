@@ -33,7 +33,7 @@ jobs:
           python -m pip install --require-hashes --only-binary=:all: -r requirements.txt
       - name: Focused native input and shutdown regressions
         timeout-minutes: 2
-        run: python -m unittest test_native_input_shutdown test_responsive_toolbar -v
+        run: python -m unittest test_native_input_shutdown test_responsive_toolbar test_annotations_localization.LocalizationTests.test_recordings_actual_sidebar_and_page_switch_immediately_both_directions -v
       - name: Full regression suite (UTF-8)
         id: regression
         timeout-minutes: 15

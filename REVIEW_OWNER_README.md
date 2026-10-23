@@ -1,8 +1,8 @@
-# Stop/input repair OWNER review
+# Compact toolbar and Recordings localization OWNER review
 
-Read **LAYOUT_REVIEW.md** for this candidate's complete recording, restricted Resources sharing, legal draft, guardian, student Remember Me, R2 and rollback instructions.
+Read **COMPACT_TOOLBAR_REVIEW.md** for this candidate's complete recording, restricted Resources sharing, legal draft, guardian, student Remember Me, R2 and rollback instructions.
 
-Extract into a new folder. Production, PR9, PR10 and PR11 review installations/data must remain separate. This candidate uses OWNER **5067**, `%LOCALAPPDATA%\MathStudioOwnerLayoutReview`, its own Quick Tunnel, and the matching **MathStudio-Layout-Review.exe** client with a distinct AppID/profile.
+Extract into a new folder. Production, PR9, PR10, PR11, PR12 and the first PR13 review installations/data must remain separate. This candidate uses OWNER **5069**, `%LOCALAPPDATA%\MathStudioOwnerCompactReview`, its own Quick Tunnel, and the matching **MathStudio-Compact-Toolbar-Review.exe** client with a distinct AppID/profile.
 
 Install/retain x64 Python 3.13. Double-click **REVIEW OWNER SETUP.bat** and select your already installed, ready Argos home. It copies the runtime, packages and verified receipt to the new review state, checks the local copy and performs offline bidirectional self-tests; translation models are neither bundled nor downloaded. Keep the original Python installation used by the copied Windows venv installed. Setup installs only the pinned OWNER dependencies, not new Argos dependencies.
 
@@ -19,7 +19,7 @@ For a wheelhouse containing the pinned OWNER wheels:
 py -3.13 .\owner_review.py setup --argos-home 'D:\YourExistingInstalledArgosHome' --wheelhouse 'D:\TrustedOwnerWheels'
 ```
 
-Then double-click **REVIEW OWNER START.bat**. Startup refuses reuse of an occupied 5067; it does not stop or reuse the earlier OWNER. Use only synthetic accounts. Enter this review's HTTPS origin in the matching teacher client and use the OWNER's local first-time pairing window. Ctrl+C stops this review and its owned tunnel. No credentials or account database are supplied.
+Then double-click **REVIEW OWNER START.bat**. Startup refuses reuse of an occupied 5069; it does not stop or reuse the earlier OWNER. Use only synthetic accounts. Enter this review's HTTPS origin in the matching teacher client and use the OWNER's local first-time pairing window. Ctrl+C stops this review and its owned tunnel. No credentials or account database are supplied.
 
 Recording is disabled until OWNER's approved policy is configured. New sharing/local/standing scopes require independently verified guardian evidence plus separate student agreement; draft policies require business-owner and qualified Alberta review before real use. **Seekable absentee playback additionally needs an explicitly selected, trusted FFmpeg on OWNER**; no FFmpeg binary is downloaded/bundled automatically. The detailed guide provides configuration and verification commands. Teacher remains client-only and never needs FFmpeg or Argos.
 

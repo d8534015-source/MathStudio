@@ -269,7 +269,7 @@ class TeacherMeetingApp:
                                     font=("Segoe UI", 14, "bold"), anchor="w")
         self.title_label.pack(anchor="w")
         tk.Label(left, textvariable=self.status_var, bg=self.BG, fg=self.MUTED,
-                 font=("Segoe UI", 9), anchor="w").pack(anchor="w", pady=(2, 0))
+                 font=("Segoe UI", 9), anchor="w", wraplength=360).pack(anchor="w", pady=(2, 0))
         right = tk.Frame(top, bg=self.BG)
         right.pack(side="right")
         self.mic_btn = self.make_button(right, "Unmute", lambda: self.send_media_command("mic-toggle"), bg="#25445a")
