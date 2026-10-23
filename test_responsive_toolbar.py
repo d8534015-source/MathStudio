@@ -43,6 +43,7 @@ class ToolbarTests(unittest.TestCase):
                 for lang in (language,'zh','en'):
                     obj.lang=lang;obj.apply_toolbar_language();layout.schedule();root.update()
                     right,mode,top,row,footer=obj.toolbar_containers
+                    print('Toolbar geometry diagnostic:',lang,{'actual':(root.winfo_width(),root.winfo_height()),'applied':layout.applied_size,'user_width':layout.user_width,'maxsize':root.maxsize(),'scaling':float(root.tk.call('tk','scaling')),'boxes':[(b.winfo_width(),b.winfo_height(),b.winfo_reqwidth()) for b in obj.toolbar_containers]})
                     # Title/status and ALL meeting controls occupy the first row.
                     self.assertEqual(len({b.winfo_rooty() for b in layout.children[right]}),1)
                     self.assertEqual(layout.children[top][0].winfo_y(),right.winfo_y())
