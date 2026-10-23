@@ -37,6 +37,7 @@ class ToolbarTests(unittest.TestCase):
         # Tk scaling is pixels/point: Windows 100% =96 DPI =96/72, not1.
         for language in ('en','zh'):
             with self.subTest(language=language),self.toolbar(96/72,language) as (root,obj),mock.patch('native_toolbar.work_area',return_value=(0,0,1920,1040)):
+                root.maxsize(1100,700)  # Deliberately stale/smaller primary-monitor limit.
                 changes=[];layout=ToolbarLayout(root,obj.toolbar_containers,lambda:changes.append(1));obj.toolbar_layout=layout
                 self.assertFalse(root.winfo_ismapped());root.deiconify();root.update()
                 self.assert_visible(root,layout)

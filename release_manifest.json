@@ -1035,13 +1035,13 @@
         "owner",
         "teacher"
       ],
-      "sha256": "021fde48602fcb5bb4c83f6acc4702f7d2404ef19173aaa74ce735cef16097f5"
+      "sha256": "8c480740d0d45450079c1ed2a4d54a1b6e5cdfe11f698b42c251c713db473580"
     },
     "test_responsive_toolbar.py": {
       "packages": [
         "owner"
       ],
-      "sha256": "fc5c860e32f3eb6c67bd86750472360d5add14179ffb1595d27e238cdb59b3d4"
+      "sha256": "b5b07fe905f7a5f4a126ebe4e6d7f8e84d30f29eafd5a8fc7aa040f7cf5d49cd"
     },
     "test_recording_layout.mjs": {
       "packages": [
@@ -1067,7 +1067,7 @@
         "owner",
         "teacher"
       ],
-      "sha256": "4ff1e1cb138ac4cd4bae3e06fe6b12bae5f21799c94c1756ffc712c7bb695740"
+      "sha256": "a96a73c4edeabeb5e3ea3808554c126165efeaa49b734c5c47f47d919e667aec"
     }
   },
   "owner_review": {

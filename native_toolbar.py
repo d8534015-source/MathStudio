@@ -58,6 +58,9 @@ class ToolbarLayout:
             left, top, right, bottom = work_area(root)
             # Leave space for Windows non-client borders and the caption.
             max_width, max_height = right-left-24, bottom-top-64
+            # Tk may inherit a primary-screen maximum smaller than this monitor.
+            # Set its WM limit before mapping, otherwise it silently forces wrapping.
+            root.maxsize(max_width,max_height)
             gap = 6
             sizes = {}
 
